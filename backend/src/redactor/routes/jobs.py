@@ -22,9 +22,9 @@ async def _run_job(job_id: str, pdf_bytes: bytes, instructions: str):
         settings = get_settings()
         suggestions = await run_pipeline(pdf_bytes, instructions, settings)
         _jobs[job_id].suggestions = suggestions
-        _jobs[job_id].status = JobStatus.COMPLETE
         blob = _blob_client()
         await blob.save_suggestions(job_id, suggestions)
+        _jobs[job_id].status = JobStatus.COMPLETE
     except Exception as ex:
         _jobs[job_id].status = JobStatus.FAILED
         _jobs[job_id].error = str(ex)
@@ -38,9 +38,9 @@ async def upload_document(
 ):
     job_id = str(uuid.uuid4())
     pdf_bytes = await file.read()
+    _jobs[job_id] = Job(job_id=job_id, status=JobStatus.PENDING)
     blob = _blob_client()
     await blob.upload_pdf(job_id, pdf_bytes)
-    _jobs[job_id] = Job(job_id=job_id, status=JobStatus.PENDING)
     background_tasks.add_task(_run_job, job_id, pdf_bytes, instructions)
     return {"job_id": job_id}
 
@@ -77,6 +77,8 @@ async def download_redacted(job_id: str):
     blob = _blob_client()
     try:
         pdf_bytes = await blob.download_redacted_pdf(job_id)
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex))
     except Exception:
         raise HTTPException(status_code=404, detail="Redacted PDF not found")
     return StreamingResponse(

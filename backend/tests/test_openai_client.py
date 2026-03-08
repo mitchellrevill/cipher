@@ -49,3 +49,18 @@ async def test_get_pii_via_llm_returns_entities(client):
     result = await client.get_pii_via_llm("John Smith lives here")
     assert len(result) == 1
     assert result[0]["category"] == "Person"
+
+@pytest.mark.asyncio
+async def test_link_entities_returns_mapping(client):
+    mock_response = MagicMock()
+    mock_response.output_text = '{"John Smith": "John Smith", "14 March 2015": "John Smith"}'
+    client._client.responses.create = AsyncMock(return_value=mock_response)
+    entities = [{"text": "John Smith"}, {"text": "14 March 2015"}]
+    result = await client.link_entities("John Smith was born on 14 March 2015.", entities)
+    assert result["John Smith"] == "John Smith"
+    assert result["14 March 2015"] == "John Smith"
+
+@pytest.mark.asyncio
+async def test_link_entities_returns_empty_for_no_entities(client):
+    result = await client.link_entities("some text", [])
+    assert result == {}

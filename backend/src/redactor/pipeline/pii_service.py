@@ -1,5 +1,9 @@
-from azure.ai.textanalytics import TextAnalyticsClient, PiiEntityCategory
+import logging
+from azure.ai.textanalytics.aio import TextAnalyticsClient
+from azure.ai.textanalytics import PiiEntityCategory
 from azure.core.credentials import AzureKeyCredential
+
+logger = logging.getLogger(__name__)
 
 UK_PII_CATEGORIES = [
     PiiEntityCategory.PERSON,
@@ -18,32 +22,25 @@ class PIIServiceClient:
     """Azure Language Service client for UK-specific PII detection."""
 
     def __init__(self, endpoint: str, key: str):
-        self._client = TextAnalyticsClient(
-            endpoint=endpoint,
-            credential=AzureKeyCredential(key)
-        )
+        self._endpoint = endpoint
+        self._key = key
 
-    def get_pii(self, text_chunk: str) -> list[dict]:
-        """
-        Extract PII entities from a text chunk.
-        Returns list of {text, category, offset, length}.
-        offset and length are character positions within text_chunk.
-        """
+    async def get_pii(self, text_chunk: str) -> list[dict]:
+        """Extract UK PII entities. Returns [{text, category, offset, length}]."""
         try:
-            results = self._client.recognize_pii_entities(
-                [text_chunk],
-                categories_filter=UK_PII_CATEGORIES
-            )
-            return [
-                {
-                    "text": e.text,
-                    "category": e.category,
-                    "offset": e.offset,
-                    "length": e.length
-                }
-                for doc in results if not doc.is_error
-                for e in doc.entities
-            ]
-        except Exception as ex:
-            print(f"PII service error: {ex}")
+            async with TextAnalyticsClient(
+                endpoint=self._endpoint,
+                credential=AzureKeyCredential(self._key)
+            ) as client:
+                results = await client.recognize_pii_entities(
+                    [text_chunk],
+                    categories_filter=UK_PII_CATEGORIES
+                )
+                return [
+                    {"text": e.text, "category": e.category, "offset": e.offset, "length": e.length}
+                    for doc in results if not doc.is_error
+                    for e in doc.entities
+                ]
+        except Exception:
+            logger.exception("PII service error")
             return []

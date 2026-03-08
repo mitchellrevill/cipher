@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from redactor.pipeline.pii_service import PIIServiceClient
 
 @pytest.fixture
@@ -14,29 +14,43 @@ def mock_pii_result():
     doc.entities = [entity]
     return [doc]
 
-def test_get_pii_returns_structured_entities(mock_pii_result):
+@pytest.mark.asyncio
+async def test_get_pii_returns_structured_entities(mock_pii_result):
     with patch("redactor.pipeline.pii_service.TextAnalyticsClient") as MockClient:
-        MockClient.return_value.recognize_pii_entities.return_value = mock_pii_result
+        mock_instance = AsyncMock()
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_instance.recognize_pii_entities = AsyncMock(return_value=mock_pii_result)
+        MockClient.return_value = mock_instance
+
         client = PIIServiceClient(endpoint="https://test", key="key")
-        result = client.get_pii("John Smith lives at 1 Main St.")
+        result = await client.get_pii("John Smith lives at 1 Main St.")
         assert len(result) == 1
         assert result[0]["text"] == "John Smith"
         assert result[0]["category"] == "Person"
         assert result[0]["offset"] == 0
         assert result[0]["length"] == 10
 
-def test_get_pii_skips_error_documents():
+@pytest.mark.asyncio
+async def test_get_pii_skips_error_documents():
     error_doc = MagicMock()
     error_doc.is_error = True
     with patch("redactor.pipeline.pii_service.TextAnalyticsClient") as MockClient:
-        MockClient.return_value.recognize_pii_entities.return_value = [error_doc]
+        mock_instance = AsyncMock()
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_instance.recognize_pii_entities = AsyncMock(return_value=[error_doc])
+        MockClient.return_value = mock_instance
+
         client = PIIServiceClient(endpoint="https://test", key="key")
-        result = client.get_pii("some text")
+        result = await client.get_pii("some text")
         assert result == []
 
-def test_get_pii_returns_empty_on_exception():
+@pytest.mark.asyncio
+async def test_get_pii_returns_empty_on_exception():
     with patch("redactor.pipeline.pii_service.TextAnalyticsClient") as MockClient:
-        MockClient.return_value.recognize_pii_entities.side_effect = Exception("API error")
+        MockClient.return_value.__aenter__ = AsyncMock(side_effect=Exception("API error"))
+        MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
         client = PIIServiceClient(endpoint="https://test", key="key")
-        result = client.get_pii("some text")
+        result = await client.get_pii("some text")
         assert result == []

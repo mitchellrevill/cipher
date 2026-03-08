@@ -1,5 +1,8 @@
 import json
+import logging
 from openai import AsyncAzureOpenAI
+
+logger = logging.getLogger(__name__)
 
 # Prompts ported verbatim from contextual-redactor/src/redactor/azure_client.py
 
@@ -115,18 +118,18 @@ class OpenAIRedactionClient:
         try:
             raw = await self._respond(_INSTRUCTION_PARSE_PROMPT, user_text)
             return json.loads(raw)
-        except Exception as ex:
-            print(f"Instruction parsing error: {ex}")
+        except Exception:
+            logger.exception("Instruction parsing error")
             return {}
 
     async def get_contextual_redactions(self, page_text: str, rule: str) -> list[dict]:
         """Apply a user-defined sensitive content rule to a page of text."""
         try:
-            system = _CONTEXTUAL_PROMPT_TEMPLATE.format(rule=rule)
+            system = _CONTEXTUAL_PROMPT_TEMPLATE.replace("{rule}", rule)
             raw = await self._respond(system, page_text)
             return json.loads(raw).get("redactions", [])
-        except Exception as ex:
-            print(f"Contextual redaction error: {ex}")
+        except Exception:
+            logger.exception("Contextual redaction error")
             return []
 
     async def link_entities(self, context_block: str, entities: list[dict]) -> dict:
@@ -138,8 +141,8 @@ class OpenAIRedactionClient:
             user = f'Text: "{context_block}"\nPII Entities: [{entity_list}]'
             raw = await self._respond(_ENTITY_LINK_PROMPT, user)
             return json.loads(raw)
-        except Exception as ex:
-            print(f"Entity linking error: {ex}")
+        except Exception:
+            logger.exception("Entity linking error")
             return {}
 
     async def get_pii_via_llm(self, page_text: str) -> list[dict]:
@@ -147,6 +150,6 @@ class OpenAIRedactionClient:
         try:
             raw = await self._respond(_PII_VIA_LLM_PROMPT, page_text)
             return json.loads(raw).get("entities", [])
-        except Exception as ex:
-            print(f"GPT PII error: {ex}")
+        except Exception:
+            logger.exception("GPT PII error")
             return []

@@ -27,7 +27,7 @@ def mock_analyse_result():
 
 @pytest.mark.asyncio
 async def test_analyse_calls_begin_analyse_document(mock_analyse_result):
-    with patch("redactor.pipeline.doc_intelligence.DocumentIntelligenceClient") as MockClient:
+    with patch("redactor.pipeline.doc_intelligence._AsyncClient") as MockClient:
         mock_client_instance = MagicMock()
         MockClient.return_value = mock_client_instance
         mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
@@ -48,7 +48,7 @@ async def test_analyse_calls_begin_analyse_document(mock_analyse_result):
 
 @pytest.mark.asyncio
 async def test_analyse_uses_prebuilt_layout_model(mock_analyse_result):
-    with patch("redactor.pipeline.doc_intelligence.DocumentIntelligenceClient") as MockClient:
+    with patch("redactor.pipeline.doc_intelligence._AsyncClient") as MockClient:
         mock_client_instance = MagicMock()
         MockClient.return_value = mock_client_instance
         mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)

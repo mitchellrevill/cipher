@@ -1,5 +1,8 @@
-from azure.ai.documentintelligence.aio import DocumentIntelligenceClient
+import logging
+from azure.ai.documentintelligence.aio import DocumentIntelligenceClient as _AsyncClient
 from azure.core.credentials import AzureKeyCredential
+
+logger = logging.getLogger(__name__)
 
 
 class DocIntelligenceClient:
@@ -15,13 +18,17 @@ class DocIntelligenceClient:
         Returns an AnalyzeResult with paragraphs, pages, and word polygons.
         Makes a single API call for the entire document.
         """
-        async with DocumentIntelligenceClient(
-            endpoint=self._endpoint,
-            credential=AzureKeyCredential(self._key)
-        ) as client:
-            poller = await client.begin_analyze_document(
-                "prebuilt-layout",
-                body=pdf_bytes,
-                content_type="application/octet-stream"
-            )
-            return await poller.result()
+        try:
+            async with _AsyncClient(
+                endpoint=self._endpoint,
+                credential=AzureKeyCredential(self._key)
+            ) as client:
+                poller = await client.begin_analyze_document(
+                    "prebuilt-layout",
+                    body=pdf_bytes,
+                    content_type="application/octet-stream"
+                )
+                return await poller.result()
+        except Exception:
+            logger.exception("Document Intelligence analysis failed")
+            raise  # Re-raise — caller needs to know the document couldn't be processed

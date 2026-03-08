@@ -37,11 +37,9 @@ class PDFProcessor:
         Pages without redactions retain their original content via import_pages.
         """
         doc = pdfium.PdfDocument(self._bytes)
-        num_pages = len(doc)
-
         new_doc = pdfium.PdfDocument.new()
-
         try:
+            num_pages = len(doc)
             for page_idx in range(num_pages):
                 page = doc[page_idx]
                 page_width = page.get_width()
@@ -88,10 +86,9 @@ class PDFProcessor:
                     new_doc.import_pages(doc, [page_idx])
 
                 page.close()
+            buf = io.BytesIO()
+            new_doc.save(buf)
+            return buf.getvalue()
         finally:
             doc.close()
-
-        buf = io.BytesIO()
-        new_doc.save(buf)
-        new_doc.close()
-        return buf.getvalue()
+            new_doc.close()

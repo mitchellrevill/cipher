@@ -72,26 +72,24 @@ async def test_add_manual_redaction():
 
 @pytest.mark.asyncio
 async def test_apply_redactions_returns_pdf():
-    with patch("redactor.routes.redactions.BlobStorageClient") as MockBlob, \
-         patch("redactor.routes.redactions.PDFProcessor") as MockPDF:
-        MockBlob.return_value.download_original_pdf = AsyncMock(return_value=b"%PDF")
-        MockBlob.return_value.save_redacted_pdf = AsyncMock()
-        MockBlob.return_value._container_client.close = AsyncMock()
+    mock_blob = MagicMock()
+    mock_blob.download_original_pdf = AsyncMock(return_value=b"%PDF")
+    mock_blob.save_redacted_pdf = AsyncMock()
+    app.state.blob_client = mock_blob
+    with patch("redactor.routes.redactions.PDFProcessor") as MockPDF:
         MockPDF.return_value.apply_redactions.return_value = b"%PDF-redacted"
-
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post("/api/jobs/job-test/redactions/apply")
     assert response.status_code == 200
 
 @pytest.mark.asyncio
 async def test_apply_redactions_response_body():
-    with patch("redactor.routes.redactions.BlobStorageClient") as MockBlob, \
-         patch("redactor.routes.redactions.PDFProcessor") as MockPDF:
-        MockBlob.return_value.download_original_pdf = AsyncMock(return_value=b"%PDF")
-        MockBlob.return_value.save_redacted_pdf = AsyncMock()
-        MockBlob.return_value._container_client.close = AsyncMock()
+    mock_blob = MagicMock()
+    mock_blob.download_original_pdf = AsyncMock(return_value=b"%PDF")
+    mock_blob.save_redacted_pdf = AsyncMock()
+    app.state.blob_client = mock_blob
+    with patch("redactor.routes.redactions.PDFProcessor") as MockPDF:
         MockPDF.return_value.apply_redactions.return_value = b"%PDF-redacted"
-
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post("/api/jobs/job-test/redactions/apply")
     data = response.json()
@@ -119,13 +117,12 @@ async def test_apply_redactions_job_not_complete():
 async def test_apply_redactions_with_none_approved():
     # Toggle s1 to unapproved first
     jobs_module._jobs["job-test"].suggestions[0].approved = False
-    with patch("redactor.routes.redactions.BlobStorageClient") as MockBlob, \
-         patch("redactor.routes.redactions.PDFProcessor") as MockPDF:
-        MockBlob.return_value.download_original_pdf = AsyncMock(return_value=b"%PDF")
-        MockBlob.return_value.save_redacted_pdf = AsyncMock()
-        MockBlob.return_value._container_client.close = AsyncMock()
+    mock_blob = MagicMock()
+    mock_blob.download_original_pdf = AsyncMock(return_value=b"%PDF")
+    mock_blob.save_redacted_pdf = AsyncMock()
+    app.state.blob_client = mock_blob
+    with patch("redactor.routes.redactions.PDFProcessor") as MockPDF:
         MockPDF.return_value.apply_redactions.return_value = b"%PDF-empty"
-
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post("/api/jobs/job-test/redactions/apply")
     assert response.status_code == 200

@@ -29,7 +29,9 @@ export default function App() {
     if (!file) return
     setUploading(true)
     try {
-      setPdfUrl(URL.createObjectURL(file))
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl)  // revoke old URL
+      const newUrl = URL.createObjectURL(file)
+      setPdfUrl(newUrl)
       const { data } = await uploadDocument(file, '')
       setJobId(data.job_id)
       setStatus('pending')

@@ -1,15 +1,16 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from redactor.main import app
 
 @pytest.mark.asyncio
 async def test_upload_returns_job_id():
-    with patch("redactor.routes.jobs.BlobStorageClient") as MockBlob, \
-         patch("redactor.routes.jobs.run_pipeline", new_callable=AsyncMock) as mock_pipeline:
-        MockBlob.return_value.upload_pdf = AsyncMock(return_value="jobs/123/original.pdf")
-        MockBlob.return_value.save_suggestions = AsyncMock()
+    mock_blob = MagicMock()
+    mock_blob.upload_pdf = AsyncMock(return_value="jobs/123/original.pdf")
+    mock_blob.save_suggestions = AsyncMock()
+    with patch("redactor.routes.jobs.run_pipeline", new_callable=AsyncMock) as mock_pipeline:
         mock_pipeline.return_value = []
+        app.state.blob_client = mock_blob
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 "/api/jobs",

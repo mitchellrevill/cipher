@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from openai import AsyncAzureOpenAI
@@ -9,17 +10,20 @@ logger = logging.getLogger(__name__)
 MAX_TOOL_ROUNDS = 10
 
 _oai_client: AsyncAzureOpenAI | None = None
+_oai_client_lock = asyncio.Lock()
 
 
-def _get_client() -> AsyncAzureOpenAI:
+async def _get_client() -> AsyncAzureOpenAI:
     global _oai_client
     if _oai_client is None:
-        settings = get_settings()
-        _oai_client = AsyncAzureOpenAI(
-            azure_endpoint=settings.azure_openai_endpoint,
-            api_key=settings.azure_openai_key,
-            api_version=settings.azure_openai_api_version,
-        )
+        async with _oai_client_lock:
+            if _oai_client is None:  # double-check after acquiring
+                settings = get_settings()
+                _oai_client = AsyncAzureOpenAI(
+                    azure_endpoint=settings.azure_openai_endpoint,
+                    api_key=settings.azure_openai_key,
+                    api_version=settings.azure_openai_api_version,
+                )
     return _oai_client
 
 SYSTEM_PROMPT = """You are a document redaction assistant. You help users review and refine \
@@ -95,7 +99,7 @@ async def run_agent_turn(
     settings = get_settings()
     tool_fns = make_tools(job_id)
 
-    client = _get_client()
+    client = await _get_client()
 
     params: dict = dict(
         model=settings.azure_openai_deployment,

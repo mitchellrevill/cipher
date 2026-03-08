@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from redactor.routes.jobs import _jobs
 from redactor.models import JobStatus, RedactionRect, Suggestion
@@ -27,33 +27,34 @@ def _get_job_or_404(job_id: str):
     return job
 
 
+def _get_blob(request: Request) -> BlobStorageClient:
+    return request.app.state.blob_client
+
+
 @router.post("/apply")
-async def apply_redactions(job_id: str):
+async def apply_redactions(job_id: str, request: Request):
     job = _get_job_or_404(job_id)
     if job.status != JobStatus.COMPLETE:
         raise HTTPException(status_code=400, detail="Job not complete")
 
-    settings = get_settings()
-    blob = BlobStorageClient(settings.azure_storage_account_url, settings.azure_storage_container)
+    blob = _get_blob(request)
     try:
-        try:
-            pdf_bytes = await blob.download_original_pdf(job_id)
-        except Exception:
-            raise HTTPException(status_code=404, detail="Original PDF not found in storage")
+        pdf_bytes = await blob.download_original_pdf(job_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Original PDF not found in storage")
 
-        approved = [s for s in job.suggestions if s.approved]
-        rects_by_page: dict[int, list[RedactionRect]] = {}
-        for suggestion in approved:
-            rects_by_page.setdefault(suggestion.page_num, []).extend(suggestion.rects)
+    approved = [s for s in job.suggestions if s.approved]
+    rects_by_page: dict[int, list[RedactionRect]] = {}
+    for suggestion in approved:
+        rects_by_page.setdefault(suggestion.page_num, []).extend(suggestion.rects)
 
-        processor = PDFProcessor(pdf_bytes)
-        try:
-            redacted_bytes = await asyncio.to_thread(processor.apply_redactions, rects_by_page)
-            await blob.save_redacted_pdf(job_id, redacted_bytes)
-        except Exception as ex:
-            raise HTTPException(status_code=500, detail=f"Failed to apply redactions: {ex}")
-    finally:
-        await blob._container_client.close()
+    processor = PDFProcessor(pdf_bytes)
+    try:
+        redacted_bytes = await asyncio.to_thread(processor.apply_redactions, rects_by_page)
+        await blob.save_redacted_pdf(job_id, redacted_bytes)
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=f"Failed to apply redactions: {ex}")
+
     return {"status": "applied", "redaction_count": len(approved)}
 
 

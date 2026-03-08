@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -34,16 +35,25 @@ async def apply_redactions(job_id: str):
 
     settings = get_settings()
     blob = BlobStorageClient(settings.azure_storage_account_url, settings.azure_storage_container)
-    pdf_bytes = await blob.download_original_pdf(job_id)
+    try:
+        try:
+            pdf_bytes = await blob.download_original_pdf(job_id)
+        except Exception:
+            raise HTTPException(status_code=404, detail="Original PDF not found in storage")
 
-    approved = [s for s in job.suggestions if s.approved]
-    rects_by_page: dict[int, list[RedactionRect]] = {}
-    for suggestion in approved:
-        rects_by_page.setdefault(suggestion.page_num, []).extend(suggestion.rects)
+        approved = [s for s in job.suggestions if s.approved]
+        rects_by_page: dict[int, list[RedactionRect]] = {}
+        for suggestion in approved:
+            rects_by_page.setdefault(suggestion.page_num, []).extend(suggestion.rects)
 
-    processor = PDFProcessor(pdf_bytes)
-    redacted_bytes = processor.apply_redactions(rects_by_page)
-    await blob.save_redacted_pdf(job_id, redacted_bytes)
+        processor = PDFProcessor(pdf_bytes)
+        try:
+            redacted_bytes = await asyncio.to_thread(processor.apply_redactions, rects_by_page)
+            await blob.save_redacted_pdf(job_id, redacted_bytes)
+        except Exception as ex:
+            raise HTTPException(status_code=500, detail=f"Failed to apply redactions: {ex}")
+    finally:
+        await blob._container_client.close()
     return {"status": "applied", "redaction_count": len(approved)}
 
 

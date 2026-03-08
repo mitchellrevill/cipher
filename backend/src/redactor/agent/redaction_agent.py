@@ -6,6 +6,22 @@ from redactor.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+MAX_TOOL_ROUNDS = 10
+
+_oai_client: AsyncAzureOpenAI | None = None
+
+
+def _get_client() -> AsyncAzureOpenAI:
+    global _oai_client
+    if _oai_client is None:
+        settings = get_settings()
+        _oai_client = AsyncAzureOpenAI(
+            azure_endpoint=settings.azure_openai_endpoint,
+            api_key=settings.azure_openai_key,
+            api_version=settings.azure_openai_api_version,
+        )
+    return _oai_client
+
 SYSTEM_PROMPT = """You are a document redaction assistant. You help users review and refine \
 AI-suggested redactions. You have access to tools to search the document, add redactions, \
 remove redactions, add exceptions, and get a summary of what has been redacted. \
@@ -79,11 +95,7 @@ async def run_agent_turn(
     settings = get_settings()
     tool_fns = make_tools(job_id)
 
-    client = AsyncAzureOpenAI(
-        azure_endpoint=settings.azure_openai_endpoint,
-        api_key=settings.azure_openai_key,
-        api_version=settings.azure_openai_api_version,
-    )
+    client = _get_client()
 
     params: dict = dict(
         model=settings.azure_openai_deployment,
@@ -95,9 +107,11 @@ async def run_agent_turn(
         params["previous_response_id"] = previous_response_id
 
     tool_calls_made = []
+    rounds = 0
 
-    # Agentic loop: keep running until no more tool calls
-    while True:
+    # Agentic loop: keep running until no more tool calls or max rounds reached
+    while rounds < MAX_TOOL_ROUNDS:
+        rounds += 1
         response = await client.responses.create(**params)
 
         # Collect any tool calls in this turn

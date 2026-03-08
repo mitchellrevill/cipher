@@ -30,6 +30,7 @@ async def test_chat_returns_response():
     data = response.json()
     assert "text" in data
     assert "response_id" in data
+    assert "tool_calls" in data
 
 @pytest.mark.asyncio
 async def test_chat_returns_404_for_unknown_job():

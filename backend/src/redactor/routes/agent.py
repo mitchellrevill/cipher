@@ -9,7 +9,7 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     job_id: str
     message: str
-    session_id: Optional[str] = None
+    session_id: Optional[str] = None  # reserved for future multi-session DB persistence
     previous_response_id: Optional[str] = None
 
 @router.post("/chat")

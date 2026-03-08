@@ -28,7 +28,7 @@ async def _get_pii_for_page(page, paragraphs, pii_client, oai_client, config):
         findings = []
         for result in results:
             if isinstance(result, Exception):
-                logger.exception("PII task error: %s", result)
+                logger.error("PII task error", exc_info=result)
             else:
                 findings.extend(result)
         return findings
@@ -109,19 +109,21 @@ async def run_pipeline(
         return_exceptions=True
     )
 
-    # Step 3: Map findings to word polygon coordinates
+    # Step 3: Map findings to word polygon coordinates.
+    # Extract words before deleting analysis — list() holds the word objects explicitly.
+    # Note: the word objects themselves are part of the analysis graph, so this is a
+    # partial fix; we avoid holding the full AnalyzeResult but the words remain live
+    # until words_by_page is deleted after the suggestion-building loop.
     words_by_page = {
-        page.page_number - 1: page.words
+        page.page_number - 1: list(page.words)  # list() to hold reference explicitly
         for page in analysis.pages
     }
-
-    # Free the large AnalyzeResult from memory
-    del analysis
+    del analysis  # AnalyzeResult can now be GC'd (words_by_page holds word objects but not the full result)
 
     suggestions: list[Suggestion] = []
     for page_num, result in enumerate(page_results):
         if isinstance(result, Exception):
-            logger.error("Page %d processing failed: %s", page_num, result)
+            logger.error("Page %d (1-based) processing failed: %s", page_num + 1, result)
             continue
 
         pii_findings, contextual_findings = result
@@ -158,6 +160,8 @@ async def run_pipeline(
                     rects=rects,
                     source="ai"
                 ))
+
+    del words_by_page  # Free word objects after suggestions are built
 
     logger.info("Pipeline complete: %d suggestions generated", len(suggestions))
 

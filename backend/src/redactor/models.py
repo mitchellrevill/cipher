@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 class JobStatus(str, Enum):
     PENDING = "pending"
@@ -23,7 +23,7 @@ class Suggestion(BaseModel):
     page_num: int
     rects: list[RedactionRect]
     approved: bool = True
-    source: str = "ai"  # "ai" | "manual" | "agent"
+    source: Literal["ai", "manual", "agent"] = "ai"
 
 class Job(BaseModel):
     job_id: str

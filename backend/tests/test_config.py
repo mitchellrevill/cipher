@@ -1,5 +1,12 @@
 # tests/test_config.py
-from redactor.config import Settings
+import pytest
+from redactor.config import Settings, get_settings
+
+@pytest.fixture(autouse=True)
+def clear_settings_cache():
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 def test_enable_pii_service_defaults_true():
     s = Settings()

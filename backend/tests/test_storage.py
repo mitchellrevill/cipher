@@ -1,14 +1,15 @@
 import pytest
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from redactor.storage.blob import BlobStorageClient
 from redactor.models import Suggestion, RedactionRect
 
 @pytest.fixture
 def blob_client():
-    with patch("redactor.storage.blob.DefaultAzureCredential") as mock_cred, \
-         patch("redactor.storage.blob.BlobServiceClient") as mock_svc:
-        mock_cred.return_value = MagicMock()
-        mock_svc.return_value = MagicMock()
+    with patch("redactor.storage.blob.BlobServiceClient") as mock_svc, \
+         patch("redactor.storage.blob.DefaultAzureCredential"):
+        mock_container = MagicMock()
+        mock_svc.return_value.get_container_client.return_value = mock_container
         client = BlobStorageClient(
             account_url="https://test.blob.core.windows.net",
             container="test"
@@ -17,23 +18,30 @@ def blob_client():
 
 @pytest.mark.asyncio
 async def test_upload_pdf_calls_upload_blob(blob_client):
-    blob_client._container_client.get_blob_client.return_value.upload_blob = AsyncMock()
-    await blob_client.upload_pdf("job-123", b"pdf-bytes")
-    blob_client._container_client.get_blob_client.assert_called_once()
+    mock_blob = MagicMock()
+    mock_blob.upload_blob = AsyncMock()
+    blob_client._container_client.get_blob_client.return_value = mock_blob
+    await blob_client.upload_pdf("550e8400-e29b-41d4-a716-446655440000", b"pdf-bytes")
+    mock_blob.upload_blob.assert_called_once_with(b"pdf-bytes", overwrite=True)
 
 @pytest.mark.asyncio
 async def test_save_suggestions_serialises_to_json(blob_client):
-    blob_client._container_client.get_blob_client.return_value.upload_blob = AsyncMock()
+    mock_blob = MagicMock()
+    mock_blob.upload_blob = AsyncMock()
+    blob_client._container_client.get_blob_client.return_value = mock_blob
     suggestions = [
         Suggestion(id="1", text="John", category="Person", reasoning="PII",
                    context="", page_num=0, rects=[RedactionRect(x0=0,y0=0,x1=10,y1=10)])
     ]
-    await blob_client.save_suggestions("job-123", suggestions)
-    blob_client._container_client.get_blob_client.return_value.upload_blob.assert_called_once()
+    await blob_client.save_suggestions("550e8400-e29b-41d4-a716-446655440000", suggestions)
+    mock_blob.upload_blob.assert_called_once()
+    # Verify JSON was passed
+    call_args = mock_blob.upload_blob.call_args[0][0]
+    parsed = json.loads(call_args)
+    assert parsed[0]["text"] == "John"
 
 @pytest.mark.asyncio
 async def test_load_suggestions_deserialises_from_json(blob_client):
-    import json
     suggestion_data = [
         {"id": "1", "text": "John", "category": "Person", "reasoning": "PII",
          "context": "", "page_num": 0, "rects": [{"x0":0,"y0":0,"x1":10,"y1":10}],
@@ -41,7 +49,15 @@ async def test_load_suggestions_deserialises_from_json(blob_client):
     ]
     mock_stream = AsyncMock()
     mock_stream.readall = AsyncMock(return_value=json.dumps(suggestion_data).encode())
-    blob_client._container_client.get_blob_client.return_value.download_blob = AsyncMock(return_value=mock_stream)
-    result = await blob_client.load_suggestions("job-123")
+    mock_blob = MagicMock()
+    mock_blob.download_blob = AsyncMock(return_value=mock_stream)
+    blob_client._container_client.get_blob_client.return_value = mock_blob
+    result = await blob_client.load_suggestions("550e8400-e29b-41d4-a716-446655440000")
     assert len(result) == 1
     assert result[0].text == "John"
+
+def test_blob_name_rejects_invalid_job_id(blob_client):
+    with pytest.raises(ValueError):
+        blob_client._blob_name("../evil", "file.pdf")
+    with pytest.raises(ValueError):
+        blob_client._blob_name("not-a-uuid", "file.pdf")

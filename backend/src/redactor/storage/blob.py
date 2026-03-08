@@ -1,7 +1,14 @@
 import json
+import re
 from azure.storage.blob.aio import BlobServiceClient
 from azure.identity.aio import DefaultAzureCredential
+from azure.core.exceptions import ResourceNotFoundError
 from redactor.models import Suggestion
+
+_JOB_ID_PATTERN = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE
+)
 
 
 class BlobStorageClient:
@@ -10,13 +17,11 @@ class BlobStorageClient:
             account_url=account_url,
             credential=DefaultAzureCredential()
         )
-        self._container = container
-
-    @property
-    def _container_client(self):
-        return self._service.get_container_client(self._container)
+        self._container_client = self._service.get_container_client(container)
 
     def _blob_name(self, job_id: str, filename: str) -> str:
+        if not _JOB_ID_PATTERN.match(job_id):
+            raise ValueError(f"Invalid job_id format: {job_id!r}")
         return f"jobs/{job_id}/{filename}"
 
     async def upload_pdf(self, job_id: str, data: bytes) -> str:
@@ -34,9 +39,12 @@ class BlobStorageClient:
     async def load_suggestions(self, job_id: str) -> list[Suggestion]:
         name = self._blob_name(job_id, "suggestions.json")
         blob = self._container_client.get_blob_client(name)
-        stream = await blob.download_blob()
-        data = await stream.readall()
-        return [Suggestion(**s) for s in json.loads(data)]
+        try:
+            stream = await blob.download_blob()
+            data = await stream.readall()
+            return [Suggestion(**s) for s in json.loads(data)]
+        except ResourceNotFoundError:
+            return []
 
     async def save_redacted_pdf(self, job_id: str, data: bytes) -> None:
         name = self._blob_name(job_id, "redacted.pdf")
@@ -49,8 +57,11 @@ class BlobStorageClient:
         stream = await blob.download_blob()
         return await stream.readall()
 
-    async def download_redacted_pdf(self, job_id: str) -> bytes:
+    async def download_redacted_pdf(self, job_id: str) -> bytes | None:
         name = self._blob_name(job_id, "redacted.pdf")
         blob = self._container_client.get_blob_client(name)
-        stream = await blob.download_blob()
-        return await stream.readall()
+        try:
+            stream = await blob.download_blob()
+            return await stream.readall()
+        except ResourceNotFoundError:
+            return None

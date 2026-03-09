@@ -134,15 +134,18 @@ async def run_pipeline(
                 continue
             rects = find_text_rects(entity["text"], words)
             if rects:
+                from datetime import datetime
                 suggestions.append(Suggestion(
                     id=str(uuid.uuid4()),
+                    job_id="",  # Will be set when saved
                     text=entity["text"],
                     category=str(entity.get("category", "Unknown")),
                     reasoning=f"Identified as {entity.get('category', 'PII')}",
                     context="",
                     page_num=page_num,
                     rects=rects,
-                    source="ai"
+                    source="ai",
+                    created_at=datetime.utcnow()
                 ))
 
         for finding in contextual_findings:
@@ -150,15 +153,18 @@ async def run_pipeline(
                 continue
             rects = find_text_rects(finding["text"], words)
             if rects:
+                from datetime import datetime
                 suggestions.append(Suggestion(
                     id=str(uuid.uuid4()),
+                    job_id="",  # Will be set when saved
                     text=finding["text"],
                     category=str(finding.get("category", "SensitiveContent")),
                     reasoning=finding.get("reasoning", ""),
                     context="",
                     page_num=page_num,
                     rects=rects,
-                    source="ai"
+                    source="ai",
+                    created_at=datetime.utcnow()
                 ))
 
     del words_by_page  # Free word objects after suggestions are built

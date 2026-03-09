@@ -6,9 +6,10 @@ from redactor.routes import jobs as jobs_module
 
 @pytest.fixture
 def seeded_job():
+    from datetime import datetime
     job_id = str(uuid.uuid4())
-    s = Suggestion(id="s1", text="John", category="Person", reasoning="", context="",
-                   page_num=0, rects=[RedactionRect(x0=0,y0=0,x1=10,y1=10)], approved=True)
+    s = Suggestion(id="s1", job_id=job_id, text="John", category="Person", reasoning="", context="",
+                   page_num=0, rects=[RedactionRect(x0=0,y0=0,x1=10,y1=10)], approved=True, created_at=datetime.utcnow())
     jobs_module._jobs[job_id] = Job(job_id=job_id, status=JobStatus.COMPLETE, suggestions=[s])
     yield job_id
     jobs_module._jobs.pop(job_id, None)

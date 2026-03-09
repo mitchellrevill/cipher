@@ -60,12 +60,13 @@ async def apply_redactions(job_id: str, request: Request):
 
 @router.post("/manual")
 def add_manual_redaction(job_id: str, redaction: ManualRedaction):
+    from datetime import datetime
     job = _get_job_or_404(job_id)
     s = Suggestion(
-        id=str(uuid.uuid4()), text="[Manual]", category="Manual",
+        id=str(uuid.uuid4()), job_id=job_id, text="[Manual]", category="Manual",
         reasoning="User-drawn redaction", context="",
         page_num=redaction.page_num, rects=redaction.rects,
-        approved=True, source="manual"
+        approved=True, source="manual", created_at=datetime.utcnow()
     )
     job.suggestions.append(s)
     return s

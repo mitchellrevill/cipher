@@ -17,14 +17,17 @@ class RedactionRect(BaseModel):
 
 class Suggestion(BaseModel):
     id: str
+    job_id: str
     text: str
     category: str
     reasoning: str
     context: str
     page_num: int
     rects: list[RedactionRect]
-    approved: bool = True
+    approved: bool = False
     source: Literal["ai", "manual", "agent"] = "ai"
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
 class Job(BaseModel):
     job_id: str

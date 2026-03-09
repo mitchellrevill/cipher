@@ -33,7 +33,7 @@ class BlobStorageClient:
     async def save_suggestions(self, job_id: str, suggestions: list[Suggestion]) -> None:
         name = self._blob_name(job_id, "suggestions.json")
         blob = self._container_client.get_blob_client(name)
-        payload = json.dumps([s.model_dump() for s in suggestions])
+        payload = json.dumps([s.model_dump(mode='json') for s in suggestions])
         await blob.upload_blob(payload.encode(), overwrite=True)
 
     async def load_suggestions(self, job_id: str) -> list[Suggestion]:

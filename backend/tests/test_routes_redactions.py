@@ -7,10 +7,11 @@ from redactor.routes import jobs as jobs_module
 
 @pytest.fixture(autouse=True)
 def seed_job():
+    from datetime import datetime
     suggestion = Suggestion(
-        id="s1", text="John Smith", category="Person",
+        id="s1", job_id="job-test", text="John Smith", category="Person",
         reasoning="PII", context="", page_num=0,
-        rects=[RedactionRect(x0=10, y0=10, x1=100, y1=30)]
+        rects=[RedactionRect(x0=10, y0=10, x1=100, y1=30)], approved=True, created_at=datetime.utcnow()
     )
     jobs_module._jobs["job-test"] = Job(
         job_id="job-test", status=JobStatus.COMPLETE, suggestions=[suggestion]

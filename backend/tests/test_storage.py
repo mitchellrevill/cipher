@@ -26,12 +26,13 @@ async def test_upload_pdf_calls_upload_blob(blob_client):
 
 @pytest.mark.asyncio
 async def test_save_suggestions_serialises_to_json(blob_client):
+    from datetime import datetime
     mock_blob = MagicMock()
     mock_blob.upload_blob = AsyncMock()
     blob_client._container_client.get_blob_client.return_value = mock_blob
     suggestions = [
-        Suggestion(id="1", text="John", category="Person", reasoning="PII",
-                   context="", page_num=0, rects=[RedactionRect(x0=0,y0=0,x1=10,y1=10)])
+        Suggestion(id="1", job_id="job-1", text="John", category="Person", reasoning="PII",
+                   context="", page_num=0, rects=[RedactionRect(x0=0,y0=0,x1=10,y1=10)], created_at=datetime.utcnow())
     ]
     await blob_client.save_suggestions("550e8400-e29b-41d4-a716-446655440000", suggestions)
     mock_blob.upload_blob.assert_called_once()
@@ -42,10 +43,12 @@ async def test_save_suggestions_serialises_to_json(blob_client):
 
 @pytest.mark.asyncio
 async def test_load_suggestions_deserialises_from_json(blob_client):
+    from datetime import datetime
+    now = datetime.utcnow()
     suggestion_data = [
-        {"id": "1", "text": "John", "category": "Person", "reasoning": "PII",
+        {"id": "1", "job_id": "job-1", "text": "John", "category": "Person", "reasoning": "PII",
          "context": "", "page_num": 0, "rects": [{"x0":0,"y0":0,"x1":10,"y1":10}],
-         "approved": True, "source": "ai"}
+         "approved": True, "source": "ai", "created_at": now.isoformat()}
     ]
     mock_stream = AsyncMock()
     mock_stream.readall = AsyncMock(return_value=json.dumps(suggestion_data).encode())

@@ -4,6 +4,7 @@ from dependency_injector import containers, providers
 from redactor.storage.blob import BlobStorageClient
 from redactor.services.job_service import JobService
 from redactor.services.redaction_service import RedactionService
+from redactor.services.agent_service import AgentService
 
 
 class AppContainer(containers.DeclarativeContainer):
@@ -17,6 +18,8 @@ class AppContainer(containers.DeclarativeContainer):
 
     And application services:
     - JobService for job lifecycle management
+    - RedactionService for document redaction
+    - AgentService for conversational AI assistance
     """
 
     config = providers.Configuration()
@@ -45,4 +48,10 @@ class AppContainer(containers.DeclarativeContainer):
     redaction_service = providers.Factory(
         RedactionService,
         cosmos_client=cosmos_client,
+    )
+
+    agent_service = providers.Factory(
+        AgentService,
+        oai_client=oai_client,
+        job_service=job_service,
     )

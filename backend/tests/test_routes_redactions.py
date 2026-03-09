@@ -1,16 +1,13 @@
+"""Tests for redactions route - legacy tests for backwards compatibility."""
 import pytest
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from datetime import datetime
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
 from redactor.models import Job, JobStatus, Suggestion, RedactionRect
-from redactor.routes import redactions
-from redactor.services.redaction_service import RedactionService
-from redactor.services.job_service import JobService
-from redactor.containers.app import AppContainer
-from redactor.config import get_settings
 
+
+# Note: All service and container mocks are now defined in conftest.py
+# The completed_job_with_suggestions and sample_suggestion fixtures are available
 
 @pytest.fixture
 def seeded_job():
@@ -26,9 +23,12 @@ def seeded_job():
 
 
 @pytest.fixture
-def mock_job_service(seeded_job):
-    """Create a mock JobService with a test job."""
-    service = AsyncMock(spec=JobService)
+def mock_job_service_redactions(seeded_job):
+    """Create a mock JobService with a seeded job for redactions testing."""
+    from unittest.mock import AsyncMock, MagicMock
+    from redactor.services.job_service import JobService
+
+    service = MagicMock(spec=JobService)
 
     async def get_job_side_effect(job_id: str):
         """Return seeded job for known job_id, None otherwise."""
@@ -41,47 +41,37 @@ def mock_job_service(seeded_job):
 
 
 @pytest.fixture
-def mock_redaction_service():
-    """Create a mock RedactionService."""
-    service = AsyncMock(spec=RedactionService)
-    service.get_suggestions = AsyncMock(return_value=[])
-    service.toggle_approval = AsyncMock(return_value=None)
-    service.add_manual_suggestion = AsyncMock(return_value=None)
-    return service
+def mock_container_redactions(mock_job_service_redactions, mock_redaction_service, mock_blob_client):
+    """Create a mock AppContainer for redactions testing."""
+    from unittest.mock import MagicMock
+    from redactor.containers.app import AppContainer
 
-
-@pytest.fixture
-def mock_blob_client():
-    """Create a mock BlobStorageClient."""
-    client = MagicMock()
-    client.download_original_pdf = AsyncMock(return_value=b"%PDF")
-    client.save_redacted_pdf = AsyncMock(return_value=None)
-    return client
-
-
-@pytest.fixture
-def mock_container(mock_job_service, mock_redaction_service, mock_blob_client):
-    """Create a mock AppContainer with services."""
     container = MagicMock(spec=AppContainer)
-    container.job_service.return_value = mock_job_service
+    container.job_service.return_value = mock_job_service_redactions
     container.redaction_service.return_value = mock_redaction_service
     container.blob_client.return_value = mock_blob_client
     return container
 
 
 @pytest.fixture
-def test_app(mock_container):
-    """Create a test FastAPI app with mocked dependencies."""
+def test_app(mock_container_redactions):
+    """Create a test FastAPI app for redactions route."""
+    from contextlib import asynccontextmanager
+    from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
+    from redactor.routes import redactions
+    from redactor.config import get_settings
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        app.container = mock_container
+        app.container = mock_container_redactions
         yield
 
     test_app = FastAPI(lifespan=lifespan)
-    test_app.container = mock_container
+    test_app.container = mock_container_redactions
 
     settings = get_settings()
-    from fastapi.middleware.cors import CORSMiddleware
+
     test_app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -169,12 +159,15 @@ async def test_apply_redactions_job_not_found(test_app, mock_redaction_service):
     assert response.status_code == 404
 
 @pytest.mark.asyncio
-async def test_apply_redactions_job_not_complete(test_app, mock_job_service, mock_redaction_service):
-    pending_job = Job(job_id="job-pending", status=JobStatus.PROCESSING)
-    mock_job_service.get_job = AsyncMock(return_value=pending_job)
+async def test_apply_redactions_job_not_complete(test_app, mock_redaction_service):
+    # The test_app fixture uses seeded_job_service which returns job-test (COMPLETE status)
+    # For this test, we need to use a job with PROCESSING status
+    # Since the seeded_job_service is hardcoded to job-test, we'll update its return value
+    pending_job = Job(job_id="job-test", status=JobStatus.PROCESSING)
+    test_app.container.job_service.return_value.get_job = AsyncMock(return_value=pending_job)
 
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
-        response = await client.post("/api/jobs/job-pending/redactions/apply")
+        response = await client.post("/api/jobs/job-test/redactions/apply")
     assert response.status_code == 400
 
 @pytest.mark.asyncio

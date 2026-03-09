@@ -1,66 +1,18 @@
+"""Tests for jobs route - legacy test compatibility."""
 import pytest
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from datetime import datetime
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from redactor.models import Job, JobStatus
-from redactor.services.job_service import JobService
-from redactor.containers.app import AppContainer
-from redactor.config import get_settings
-from redactor.routes import jobs
+
+
+# Note: Service and container mocks are now defined in conftest.py
+# The test_app fixture automatically includes the jobs router
 
 
 @pytest.fixture
-def mock_job_service():
-    """Create a mock JobService."""
-    service = MagicMock(spec=JobService)
-    service.create_job = AsyncMock()
-    service.get_job = AsyncMock()
-    return service
-
-
-@pytest.fixture
-def mock_blob_client():
-    """Create a mock BlobStorageClient."""
-    client = MagicMock()
-    client.upload_pdf = AsyncMock()
-    client.download_redacted_pdf = AsyncMock()
-    client.save_suggestions = AsyncMock()
-    return client
-
-
-@pytest.fixture
-def mock_container(mock_job_service, mock_blob_client):
-    """Create a mock AppContainer with services."""
-    container = MagicMock(spec=AppContainer)
-    container.job_service.return_value = mock_job_service
-    container.blob_client.return_value = mock_blob_client
-    return container
-
-
-@pytest.fixture
-def test_app_legacy(mock_container):
-    """Create a test FastAPI app with mocked dependencies for legacy tests."""
-
-    @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        app.container = mock_container
-        yield
-
-    test_app = FastAPI(lifespan=lifespan)
-    test_app.container = mock_container
-
-    settings = get_settings()
-    test_app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    test_app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
+def test_app_legacy(test_app):
+    """Alias for test_app fixture for backwards compatibility."""
     return test_app
 
 

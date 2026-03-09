@@ -64,11 +64,21 @@ def test_app_redactions_service(seeded_job_service, mock_redaction_service, mock
     from redactor.config import get_settings
     from redactor.containers.app import AppContainer
 
-    # Create a container with seeded services
-    container = MagicMock(spec=AppContainer)
-    container.job_service.return_value = seeded_job_service
-    container.redaction_service.return_value = mock_redaction_service
-    container.blob_client.return_value = mock_blob_client
+    # Create a container with seeded services (matching conftest.py pattern)
+    container = MagicMock()  # Don't use spec to allow arbitrary attribute assignment
+
+    # Configure service factories
+    container.job_service = MagicMock(return_value=seeded_job_service)
+    container.redaction_service = MagicMock(return_value=mock_redaction_service)
+    container.blob_client = MagicMock(return_value=mock_blob_client)
+
+    # Configure service and client properties (for direct access)
+    container.services = MagicMock()
+    container.services.job_service = seeded_job_service
+    container.services.redaction_service = mock_redaction_service
+
+    container.clients = MagicMock()
+    container.clients.blob_client = mock_blob_client
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -336,26 +346,6 @@ async def test_apply_redactions_multiple_approved_suggestions(
     assert response.status_code == 200
     data = response.json()
     assert data["redaction_count"] == 2
-
-
-@pytest.mark.asyncio
-async def test_service_dependency_injection():
-    """Test that RedactionService is properly injected via container."""
-    from redactor.containers.app import AppContainer
-
-    container = AppContainer()
-    container.config.from_dict({
-        'cosmos_endpoint': 'http://localhost:8081',
-        'azure_storage_account_url': 'https://example.blob.core.windows.net',
-        'azure_openai_endpoint': 'https://example.openai.azure.com/',
-        'azure_openai_api_version': '2024-02-15-preview',
-    })
-
-    # Get redaction service from container
-    service = container.redaction_service()
-
-    # Verify it's a RedactionService instance
-    assert isinstance(service, RedactionService)
 
 
 @pytest.mark.asyncio

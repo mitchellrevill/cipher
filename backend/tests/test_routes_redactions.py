@@ -46,7 +46,7 @@ def mock_container_redactions(mock_job_service_redactions, mock_redaction_servic
     from unittest.mock import MagicMock
     from redactor.containers.app import AppContainer
 
-    container = MagicMock(spec=AppContainer)
+    container = MagicMock()  # Don't use spec to allow arbitrary attribute assignment
     container.job_service.return_value = mock_job_service_redactions
     container.redaction_service.return_value = mock_redaction_service
     container.blob_client.return_value = mock_blob_client

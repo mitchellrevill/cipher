@@ -97,7 +97,7 @@ def mock_container(mock_job_service, mock_redaction_service, mock_agent_service,
     This fixture provides dependency injection for route tests, allowing
     tests to verify route behavior using mocked services.
     """
-    container = MagicMock(spec=AppContainer)
+    container = MagicMock()  # Don't use spec to allow arbitrary attribute assignment
 
     # Configure service factory methods
     container.job_service.return_value = mock_job_service

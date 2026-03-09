@@ -36,9 +36,9 @@ async def lifespan(app: FastAPI):
         })
 
         # Initialize singleton clients
-        cosmos = container.clients.cosmos_client()
-        blob = container.clients.blob_client()
-        oai = container.clients.oai_client()
+        cosmos = container.cosmos_client()
+        blob = container.blob_client()
+        oai = container.oai_client()
 
         # Initialize Cosmos DB collections if needed
         try:

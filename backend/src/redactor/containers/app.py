@@ -2,6 +2,7 @@
 
 from dependency_injector import containers, providers
 from redactor.storage.blob import BlobStorageClient
+from redactor.services.job_service import JobService
 
 
 class AppContainer(containers.DeclarativeContainer):
@@ -12,6 +13,9 @@ class AppContainer(containers.DeclarativeContainer):
     - Cosmos DB client
     - Blob Storage client
     - Azure OpenAI client
+
+    And application services:
+    - JobService for job lifecycle management
     """
 
     config = providers.Configuration()
@@ -29,4 +33,10 @@ class AppContainer(containers.DeclarativeContainer):
 
     oai_client = providers.Factory(
         lambda: None,  # Placeholder - OpenAI client to be implemented
+    )
+
+    # Application services
+    job_service = providers.Factory(
+        JobService,
+        cosmos_client=cosmos_client,
     )

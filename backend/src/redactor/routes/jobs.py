@@ -1,33 +1,50 @@
 import asyncio
 import uuid
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Request
+from typing import Annotated
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Request, Depends
 from fastapi.responses import StreamingResponse
 from redactor.config import get_settings
 from redactor.models import Job, JobStatus
+from redactor.services.job_service import JobService
 from redactor.storage.blob import BlobStorageClient
 from redactor.pipeline.orchestrator import run_pipeline
 
 router = APIRouter()
-_jobs: dict[str, Job] = {}  # in-memory; replace with DB in production
+
+# Legacy in-memory job storage for backward compatibility with other routes/tests
+# TODO: Remove once all routes/tests migrate to JobService
+_jobs: dict[str, Job] = {}
 
 MAX_STREAM_SECONDS = 600  # 10 minutes
 
 
 def _get_blob(request: Request) -> BlobStorageClient:
-    return request.app.state.blob_client
+    """Get BlobStorageClient from app container."""
+    return request.app.container.blob_client()
 
 
-async def _run_job(job_id: str, pdf_bytes: bytes, instructions: str, blob: BlobStorageClient):
-    _jobs[job_id].status = JobStatus.PROCESSING
+async def get_job_service(request: Request) -> JobService:
+    """Get JobService from app container via dependency injection."""
+    return request.app.container.job_service()
+
+
+async def _run_job(
+    job_id: str,
+    pdf_bytes: bytes,
+    instructions: str,
+    blob: BlobStorageClient,
+    job_service: JobService
+):
+    """Run redaction pipeline and update job status."""
+    await job_service.update_status(job_id, JobStatus.PROCESSING)
     try:
         settings = get_settings()
         suggestions = await run_pipeline(pdf_bytes, instructions, settings)
-        _jobs[job_id].suggestions = suggestions
+        await job_service.update_suggestions(job_id, len(suggestions))
         await blob.save_suggestions(job_id, suggestions)
-        _jobs[job_id].status = JobStatus.COMPLETE
+        await job_service.update_status(job_id, JobStatus.COMPLETE)
     except Exception as ex:
-        _jobs[job_id].status = JobStatus.FAILED
-        _jobs[job_id].error = str(ex)
+        await job_service.update_status(job_id, JobStatus.FAILED, str(ex))
 
 
 @router.post("", status_code=202)
@@ -35,34 +52,50 @@ async def upload_document(
     request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    instructions: str = Form(default="")
+    instructions: str = Form(default=""),
+    job_service: Annotated[JobService, Depends(get_job_service)] = None
 ):
+    """Upload a document for redaction."""
     job_id = str(uuid.uuid4())
     pdf_bytes = await file.read()
-    _jobs[job_id] = Job(job_id=job_id, status=JobStatus.PENDING)
+
+    # Create job via service
+    job = await job_service.create_job(job_id=job_id, filename=file.filename)
+
+    # Upload PDF to blob storage
     blob = _get_blob(request)
     await blob.upload_pdf(job_id, pdf_bytes)
-    background_tasks.add_task(_run_job, job_id, pdf_bytes, instructions, blob)
-    return {"job_id": job_id}
+
+    # Start pipeline in background
+    background_tasks.add_task(_run_job, job_id, pdf_bytes, instructions, blob, job_service)
+
+    return {"job_id": job.job_id}
 
 
 @router.get("/{job_id}")
-async def get_job(job_id: str):
-    job = _jobs.get(job_id)
+async def get_job(
+    job_id: str,
+    job_service: Annotated[JobService, Depends(get_job_service)] = None
+):
+    """Get job status."""
+    job = await job_service.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
 
 
 @router.get("/{job_id}/stream")
-async def stream_job_status(job_id: str):
+async def stream_job_status(
+    job_id: str,
+    job_service: Annotated[JobService, Depends(get_job_service)] = None
+):
     """SSE endpoint — streams status updates until job completes."""
     from sse_starlette.sse import EventSourceResponse
 
     async def event_generator():
         elapsed = 0
         while elapsed < MAX_STREAM_SECONDS:
-            job = _jobs.get(job_id)
+            job = await job_service.get_job(job_id)
             if not job:
                 yield {"data": '{"error": "not found"}'}
                 break
@@ -73,16 +106,16 @@ async def stream_job_status(job_id: str):
             elapsed += 1
         else:
             # Timeout — mark job as failed if still processing
-            job = _jobs.get(job_id)
+            job = await job_service.get_job(job_id)
             if job and job.status == JobStatus.PROCESSING:
-                job.status = JobStatus.FAILED
-                job.error = "Processing timeout"
+                await job_service.update_status(job_id, JobStatus.FAILED, "Processing timeout")
 
     return EventSourceResponse(event_generator())
 
 
 @router.get("/{job_id}/download")
 async def download_redacted(job_id: str, request: Request):
+    """Download redacted PDF."""
     blob = _get_blob(request)
     try:
         pdf_bytes = await blob.download_redacted_pdf(job_id)

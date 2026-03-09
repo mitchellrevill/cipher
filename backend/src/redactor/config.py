@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     azure_storage_account_url: str = ""
     azure_storage_container: str = "redaction-jobs"
 
+    # Azure Cosmos DB
+    cosmos_endpoint: str = ""
+
     # Feature flags
     enable_pii_service: bool = True
 

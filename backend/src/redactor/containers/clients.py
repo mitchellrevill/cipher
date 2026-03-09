@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 from dependency_injector import containers, providers
 from azure.identity import ManagedIdentityCredential, DefaultAzureCredential
 from azure.cosmos import CosmosClient
@@ -6,27 +7,29 @@ from azure.storage.blob import BlobServiceClient
 from openai import AsyncAzureOpenAI
 import os
 
+AZURE_ENV_PRODUCTION = 'production'
 
-def _validate_and_create_cosmos(url, credential):
-    """Create CosmosClient with config validation."""
-    if url is None:
-        raise ValueError("cosmos_endpoint config is required but not set")
+
+def _validate_and_create_cosmos(url: Optional[str], credential) -> CosmosClient:
+    """Validate and create Cosmos DB client."""
+    if not url:
+        raise ValueError("Cosmos endpoint URL required but not set in config")
     return CosmosClient(url=url, credential=credential)
 
 
-def _validate_and_create_blob(account_url, credential):
-    """Create BlobServiceClient with config validation."""
-    if account_url is None:
-        raise ValueError("azure_storage_account_url config is required but not set")
+def _validate_and_create_blob(account_url: Optional[str], credential) -> BlobServiceClient:
+    """Validate and create Blob Storage client."""
+    if not account_url:
+        raise ValueError("Azure Storage account URL required but not set in config")
     return BlobServiceClient(account_url=account_url, credential=credential)
 
 
-def _validate_and_create_oai(azure_endpoint, credential, api_version):
-    """Create AsyncAzureOpenAI with config validation."""
-    if azure_endpoint is None:
-        raise ValueError("azure_openai_endpoint config is required but not set")
-    if api_version is None:
-        raise ValueError("azure_openai_api_version config is required but not set")
+def _validate_and_create_oai(azure_endpoint: Optional[str], credential, api_version: Optional[str]) -> AsyncAzureOpenAI:
+    """Validate and create Azure OpenAI client."""
+    if not azure_endpoint:
+        raise ValueError("Azure OpenAI endpoint required but not set in config")
+    if not api_version:
+        raise ValueError("Azure OpenAI API version required but not set in config")
     return AsyncAzureOpenAI(
         azure_endpoint=azure_endpoint,
         credential=credential,
@@ -78,7 +81,7 @@ class ClientsContainer(containers.DeclarativeContainer):
     # Single credential object, reused for all Azure services
     credential = providers.Singleton(
         lambda: ManagedIdentityCredential()
-                if os.getenv('AZURE_ENV') == 'production'
+                if os.getenv('AZURE_ENV') == AZURE_ENV_PRODUCTION
                 else DefaultAzureCredential()  # local dev: uses `az login`
     )
 

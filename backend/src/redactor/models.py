@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from enum import Enum
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 from datetime import datetime
 
 class JobStatus(str, Enum):
@@ -40,6 +40,18 @@ class Job(BaseModel):
     completed_at: Optional[datetime] = None
     user_id: Optional[str] = None
     suggestions_count: int = 0
+
+class ChatMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    text: str
+    timestamp: datetime
+
+class ChatSession(BaseModel):
+    id: str
+    job_id: str
+    created_at: datetime
+    last_response_id: Optional[str] = None
+    messages: List[ChatMessage] = []
 
 class AgentSession(BaseModel):
     session_id: str

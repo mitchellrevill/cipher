@@ -6,14 +6,15 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from redactor.models import Job, JobStatus, Suggestion, RedactionRect
-from redactor.routes import jobs as jobs_module, redactions
+from redactor.routes import redactions
 from redactor.services.redaction_service import RedactionService
+from redactor.services.job_service import JobService
 from redactor.containers.app import AppContainer
 from redactor.config import get_settings
 
 
-@pytest.fixture(autouse=True)
-def seed_job():
+@pytest.fixture
+def seeded_job():
     """Create a test job with suggestions for testing."""
     suggestion = Suggestion(
         id="s1", job_id="job-test", text="John Smith", category="Person",
@@ -21,11 +22,24 @@ def seed_job():
         rects=[RedactionRect(x0=10, y0=10, x1=100, y1=30)], approved=True,
         created_at=datetime.utcnow()
     )
-    jobs_module._jobs["job-test"] = Job(
+    return Job(
         job_id="job-test", status=JobStatus.COMPLETE, suggestions=[suggestion]
     )
-    yield
-    jobs_module._jobs.pop("job-test", None)
+
+
+@pytest.fixture
+def mock_job_service(seeded_job):
+    """Create a mock JobService with a test job."""
+    service = AsyncMock(spec=JobService)
+
+    async def get_job_side_effect(job_id: str):
+        """Return seeded job for known job_id, None otherwise."""
+        if job_id == "job-test":
+            return seeded_job
+        return None
+
+    service.get_job = AsyncMock(side_effect=get_job_side_effect)
+    return service
 
 
 @pytest.fixture
@@ -48,9 +62,10 @@ def mock_blob_client():
 
 
 @pytest.fixture
-def mock_container(mock_redaction_service, mock_blob_client):
+def mock_container(mock_job_service, mock_redaction_service, mock_blob_client):
     """Create a mock AppContainer with services."""
     container = MagicMock(spec=AppContainer)
+    container.job_service.return_value = mock_job_service
     container.redaction_service.return_value = mock_redaction_service
     container.blob_client.return_value = mock_blob_client
     return container
@@ -101,10 +116,11 @@ async def test_toggle_suggestion_approval_with_service(test_app, mock_redaction_
 
 
 @pytest.mark.asyncio
-async def test_toggle_suggestion_approval_to_true(test_app, mock_redaction_service):
+async def test_toggle_suggestion_approval_to_true(test_app, mock_redaction_service, mock_job_service, seeded_job):
     """Test toggling suggestion approval to True."""
     # First set to False
-    jobs_module._jobs["job-test"].suggestions[0].approved = False
+    seeded_job.suggestions[0].approved = False
+    mock_job_service.get_job = AsyncMock(return_value=seeded_job)
 
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
         response = await client.patch(
@@ -166,9 +182,10 @@ async def test_add_manual_redaction_with_service(test_app, mock_redaction_servic
 
 
 @pytest.mark.asyncio
-async def test_add_manual_redaction_persists_to_service(test_app, mock_redaction_service):
+async def test_add_manual_redaction_persists_to_service(test_app, mock_redaction_service, mock_job_service, seeded_job):
     """Test that manual redaction is persisted via service."""
-    initial_count = len(jobs_module._jobs["job-test"].suggestions)
+    initial_count = len(seeded_job.suggestions)
+    mock_job_service.get_job = AsyncMock(return_value=seeded_job)
 
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
         response = await client.post(
@@ -178,7 +195,7 @@ async def test_add_manual_redaction_persists_to_service(test_app, mock_redaction
 
     assert response.status_code == 200
     # Verify suggestion was added to in-memory job
-    assert len(jobs_module._jobs["job-test"].suggestions) == initial_count + 1
+    assert len(seeded_job.suggestions) == initial_count + 1
     # Verify service was called to persist
     mock_redaction_service.add_manual_suggestion.assert_called_once()
 
@@ -213,17 +230,20 @@ async def test_apply_redactions_job_not_found(test_app, mock_redaction_service):
 
 
 @pytest.mark.asyncio
-async def test_apply_redactions_job_not_complete(test_app, mock_redaction_service):
+async def test_apply_redactions_job_not_complete(test_app, mock_job_service, mock_redaction_service):
     """Test applying redactions when job is not complete."""
-    jobs_module._jobs["job-pending"] = Job(job_id="job-pending", status=JobStatus.PROCESSING)
-    try:
-        async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
-            response = await client.post("/api/jobs/job-pending/redactions/apply")
+    pending_job = Job(job_id="job-pending", status=JobStatus.PROCESSING)
 
-        assert response.status_code == 400
-        assert response.json()["detail"] == "Job not complete"
-    finally:
-        jobs_module._jobs.pop("job-pending", None)
+    # Create a new mock for this specific test
+    mock_job_service_pending = AsyncMock(spec=JobService)
+    mock_job_service_pending.get_job = AsyncMock(return_value=pending_job)
+    test_app.container.job_service.return_value = mock_job_service_pending
+
+    async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+        response = await client.post("/api/jobs/job-pending/redactions/apply")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Job not complete"
 
 
 @pytest.mark.asyncio
@@ -252,10 +272,10 @@ async def test_apply_redactions_processor_error(test_app, mock_redaction_service
 
 
 @pytest.mark.asyncio
-async def test_apply_redactions_no_approved_suggestions(test_app, mock_redaction_service, mock_blob_client):
+async def test_apply_redactions_no_approved_suggestions(test_app, mock_redaction_service, mock_blob_client, seeded_job):
     """Test applying redactions when no suggestions are approved."""
     # Unapprove all suggestions
-    for s in jobs_module._jobs["job-test"].suggestions:
+    for s in seeded_job.suggestions:
         s.approved = False
 
     with patch("redactor.routes.redactions.PDFProcessor") as MockPDF:
@@ -273,7 +293,8 @@ async def test_apply_redactions_no_approved_suggestions(test_app, mock_redaction
 async def test_apply_redactions_multiple_approved_suggestions(
     test_app,
     mock_redaction_service,
-    mock_blob_client
+    mock_blob_client,
+    seeded_job
 ):
     """Test applying redactions with multiple approved suggestions."""
     # Add another approved suggestion
@@ -283,7 +304,7 @@ async def test_apply_redactions_multiple_approved_suggestions(
         rects=[RedactionRect(x0=110, y0=10, x1=200, y1=30)], approved=True,
         created_at=datetime.utcnow()
     )
-    jobs_module._jobs["job-test"].suggestions.append(suggestion2)
+    seeded_job.suggestions.append(suggestion2)
 
     with patch("redactor.routes.redactions.PDFProcessor") as MockPDF:
         MockPDF.return_value.apply_redactions.return_value = b"%PDF-redacted"

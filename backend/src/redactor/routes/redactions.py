@@ -3,12 +3,12 @@ import uuid
 from typing import Annotated
 from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
-from redactor.routes.jobs import _jobs
 from redactor.models import JobStatus, RedactionRect, Suggestion
 from redactor.pdf.processor import PDFProcessor
 from redactor.storage.blob import BlobStorageClient
 from redactor.config import get_settings
 from redactor.services.redaction_service import RedactionService
+from redactor.services.job_service import JobService
 
 router = APIRouter()
 
@@ -22,15 +22,13 @@ class ManualRedaction(BaseModel):
     rects: list[RedactionRect]
 
 
-def _get_job_or_404(job_id: str):
-    job = _jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
-
-
 def _get_blob(request: Request) -> BlobStorageClient:
     return request.app.container.blob_client()
+
+
+async def get_job_service(request: Request) -> JobService:
+    """Get JobService from app container via dependency injection."""
+    return request.app.container.job_service()
 
 
 async def get_redaction_service(request: Request) -> RedactionService:
@@ -42,10 +40,13 @@ async def get_redaction_service(request: Request) -> RedactionService:
 async def apply_redactions(
     job_id: str,
     request: Request,
+    job_service: Annotated[JobService, Depends(get_job_service)],
     redaction_service: Annotated[RedactionService, Depends(get_redaction_service)]
 ):
     """Apply redactions by saving approved suggestions and generating redacted PDF."""
-    job = _get_job_or_404(job_id)
+    job = await job_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
     if job.status != JobStatus.COMPLETE:
         raise HTTPException(status_code=400, detail="Job not complete")
 
@@ -74,11 +75,14 @@ async def apply_redactions(
 async def add_manual_redaction(
     job_id: str,
     redaction: ManualRedaction,
+    job_service: Annotated[JobService, Depends(get_job_service)],
     redaction_service: Annotated[RedactionService, Depends(get_redaction_service)]
 ):
     """Add a manually created redaction suggestion."""
     from datetime import datetime
-    job = _get_job_or_404(job_id)
+    job = await job_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
     s = Suggestion(
         id=str(uuid.uuid4()), job_id=job_id, text="[Manual]", category="Manual",
         reasoning="User-drawn redaction", context="",
@@ -96,10 +100,13 @@ async def toggle_approval(
     job_id: str,
     suggestion_id: str,
     update: ApprovalUpdate,
+    job_service: Annotated[JobService, Depends(get_job_service)],
     redaction_service: Annotated[RedactionService, Depends(get_redaction_service)]
 ):
     """Toggle approval status for a suggestion."""
-    job = _get_job_or_404(job_id)
+    job = await job_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
     for s in job.suggestions:
         if s.id == suggestion_id:
             s.approved = update.approved

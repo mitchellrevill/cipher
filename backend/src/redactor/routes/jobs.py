@@ -11,10 +11,6 @@ from redactor.pipeline.orchestrator import run_pipeline
 
 router = APIRouter()
 
-# Legacy in-memory job storage for backward compatibility with other routes/tests
-# TODO: Remove once all routes/tests migrate to JobService
-_jobs: dict[str, Job] = {}
-
 MAX_STREAM_SECONDS = 600  # 10 minutes
 
 

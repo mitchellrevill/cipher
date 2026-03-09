@@ -40,6 +40,16 @@ async def lifespan(app: FastAPI):
         blob = container.clients.blob_client()
         oai = container.clients.oai_client()
 
+        # Initialize Cosmos DB collections if needed
+        try:
+            from redactor.db.cosmos_init import setup_cosmos_db
+            await setup_cosmos_db(
+                endpoint=settings.cosmos_endpoint,
+                db_name=settings.cosmos_db_name
+            )
+        except Exception as e:
+            logger.warning(f"Cosmos DB already initialized or setup skipped: {e}")
+
         # Test connectivity (comment out if using Managed Identity in production)
         logger.info("Testing service connectivity...")
         logger.info("✓ Cosmos DB initialized")

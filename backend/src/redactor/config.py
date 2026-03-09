@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     # Azure Cosmos DB
     cosmos_endpoint: str = ""
+    cosmos_db_name: str = "redactor"
 
     # Feature flags
     enable_pii_service: bool = True

@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from enum import Enum
 from typing import Literal, Optional
+from datetime import datetime
 
 class JobStatus(str, Enum):
     PENDING = "pending"
@@ -28,9 +29,14 @@ class Suggestion(BaseModel):
 class Job(BaseModel):
     job_id: str
     status: JobStatus
-    page_count: Optional[int] = None
+    filename: Optional[str] = None
+    page_count: int = 0
     suggestions: list[Suggestion] = []
     error: Optional[str] = None
+    created_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    user_id: Optional[str] = None
+    suggestions_count: int = 0
 
 class AgentSession(BaseModel):
     session_id: str

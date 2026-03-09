@@ -3,6 +3,7 @@
 from dependency_injector import containers, providers
 from redactor.storage.blob import BlobStorageClient
 from redactor.services.job_service import JobService
+from redactor.services.redaction_service import RedactionService
 
 
 class AppContainer(containers.DeclarativeContainer):
@@ -38,5 +39,10 @@ class AppContainer(containers.DeclarativeContainer):
     # Application services
     job_service = providers.Factory(
         JobService,
+        cosmos_client=cosmos_client,
+    )
+
+    redaction_service = providers.Factory(
+        RedactionService,
         cosmos_client=cosmos_client,
     )

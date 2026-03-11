@@ -56,8 +56,6 @@ class PDFProcessor:
                 page.apply_redactions(images=2)
 
             # Save to bytes buffer
-            buf = io.BytesIO()
-            doc.write(buf, garbage=4, deflate=True, clean=True)
-            return buf.getvalue()
+            return doc.write(garbage=4, deflate=True, clean=True)
         finally:
             doc.close()

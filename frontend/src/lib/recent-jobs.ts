@@ -1,0 +1,161 @@
+import { parseJSON } from "@/lib/utils";
+import type { JobStatus } from "@/api/services";
+
+const RECENT_JOBS_STORAGE_KEY = "cipher.recentJobs";
+const ACTIVE_JOB_STORAGE_KEY = "cipher.activeJobId";
+const RECENT_JOBS_EVENT = "cipher:recent-jobs-updated";
+
+export interface RecentJobRecord {
+  jobId: string;
+  filename: string;
+  createdAt: string;
+  status: JobStatus;
+  suggestionsCount?: number;
+  fileSize?: number;
+  completedAt?: string;
+  error?: string;
+  hasRedactedPdf?: boolean;
+}
+
+interface LocalPdfRecord {
+  fileName: string;
+  fileSize: number;
+  objectUrl: string;
+}
+
+const localPdfRegistry = new Map<string, LocalPdfRecord>();
+
+function canUseStorage(): boolean {
+  return typeof window !== "undefined";
+}
+
+function emitRecentJobsUpdated() {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent(RECENT_JOBS_EVENT));
+}
+
+export function getRecentJobs(): RecentJobRecord[] {
+  if (!canUseStorage()) {
+    return [];
+  }
+
+  const raw = window.localStorage.getItem(RECENT_JOBS_STORAGE_KEY);
+  const jobs = parseJSON<RecentJobRecord[]>(raw ?? "[]", []);
+
+  return jobs
+    .filter((job) => typeof job.jobId === "string" && job.jobId.length > 0)
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+}
+
+export function subscribeRecentJobs(callback: () => void): () => void {
+  if (!canUseStorage()) {
+    return () => {};
+  }
+
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === RECENT_JOBS_STORAGE_KEY || event.key === ACTIVE_JOB_STORAGE_KEY) {
+      callback();
+    }
+  };
+
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(RECENT_JOBS_EVENT, callback);
+
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(RECENT_JOBS_EVENT, callback);
+  };
+}
+
+export function getActiveJobId(): string | null {
+  if (!canUseStorage()) {
+    return null;
+  }
+
+  return window.localStorage.getItem(ACTIVE_JOB_STORAGE_KEY);
+}
+
+export function setActiveJobId(jobId: string | null) {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  if (getActiveJobId() === jobId) {
+    return;
+  }
+
+  if (jobId) {
+    window.localStorage.setItem(ACTIVE_JOB_STORAGE_KEY, jobId);
+  } else {
+    window.localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY);
+  }
+
+  emitRecentJobsUpdated();
+}
+
+export function upsertRecentJob(job: RecentJobRecord) {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  const jobs = getRecentJobs();
+  const existing = jobs.find((entry) => entry.jobId === job.jobId);
+  const mergedJob = {
+    ...existing,
+    ...job,
+  };
+
+  if (existing && JSON.stringify(existing) === JSON.stringify(mergedJob)) {
+    return;
+  }
+
+  const nextJobs = [
+    mergedJob,
+    ...jobs.filter((entry) => entry.jobId !== job.jobId),
+  ].slice(0, 20);
+
+  window.localStorage.setItem(RECENT_JOBS_STORAGE_KEY, JSON.stringify(nextJobs));
+  emitRecentJobsUpdated();
+}
+
+export function removeRecentJob(jobId: string) {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  const nextJobs = getRecentJobs().filter((job) => job.jobId !== jobId);
+  window.localStorage.setItem(RECENT_JOBS_STORAGE_KEY, JSON.stringify(nextJobs));
+
+  if (getActiveJobId() === jobId) {
+    setActiveJobId(nextJobs[0]?.jobId ?? null);
+  } else {
+    emitRecentJobsUpdated();
+  }
+}
+
+export function registerLocalPdf(jobId: string, file: File): string {
+  const existing = localPdfRegistry.get(jobId);
+  if (existing) {
+    URL.revokeObjectURL(existing.objectUrl);
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  localPdfRegistry.set(jobId, {
+    fileName: file.name,
+    fileSize: file.size,
+    objectUrl,
+  });
+
+  return objectUrl;
+}
+
+export function getLocalPdfUrl(jobId: string): string | null {
+  return localPdfRegistry.get(jobId)?.objectUrl ?? null;
+}
+
+export function getLocalPdfMetadata(jobId: string): LocalPdfRecord | null {
+  return localPdfRegistry.get(jobId) ?? null;
+}

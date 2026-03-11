@@ -5,9 +5,12 @@ Manages creation, retrieval, and state management of document processing jobs.
 Persists job data to Cosmos DB with indefinite retention for UX.
 """
 
+import logging
 from typing import Optional, List
 from datetime import datetime
 from redactor.models import Job, JobStatus
+
+logger = logging.getLogger(__name__)
 
 
 class JobService:
@@ -21,9 +24,10 @@ class JobService:
     CONTAINER_NAME = "jobs"
     PARTITION_KEY = "job_id"
 
-    def __init__(self, cosmos_client):
-        """Initialize JobService with Cosmos DB client."""
+    def __init__(self, cosmos_client, blob_client=None):
+        """Initialize JobService with Cosmos DB and optional Blob Storage clients."""
         self.cosmos_client = cosmos_client
+        self.blob_client = blob_client
         self.container = None
 
     async def _get_container(self):
@@ -76,7 +80,22 @@ class JobService:
         """
         try:
             result = self.cosmos_client.read_item(item=job_id, partition_key=job_id)
-            return self._doc_to_job(result)
+            job = self._doc_to_job(result)
+            logger.info(f"Retrieved job {job_id} from Cosmos: status={job.status}, suggestions_count={job.suggestions_count}")
+            
+            # Load suggestions from blob storage if available
+            if self.blob_client:
+                logger.info(f"blob_client is available, attempting to load suggestions for {job_id}")
+                try:
+                    suggestions = await self.blob_client.load_suggestions(job_id)
+                    job.suggestions = suggestions
+                    logger.info(f"Loaded {len(suggestions)} suggestions for job {job_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to load suggestions for {job_id}: {type(e).__name__}: {str(e)[:100]}")
+            else:
+                logger.warning(f"blob_client is None for job {job_id} - suggestions will not be loaded")
+            
+            return job
         except Exception:
             return None
 

@@ -14,7 +14,7 @@ class ChatRequest(BaseModel):
 
 async def get_agent_service(request: Request) -> AgentService:
     """Get AgentService from app container."""
-    return request.app.container.agent_service()
+    return request.app.container.services.agent_service()
 
 
 @router.post("/chat")

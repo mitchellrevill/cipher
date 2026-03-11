@@ -1,55 +1,55 @@
-import axios from 'axios'
+/**
+ * Axios instance with interceptors for API calls
+ * Handles:
+ * - JWT authentication (skipped in dev mode)
+ * - Error handling
+ * - Request/response transformation
+ * - Retry logic
+ */
 
-export const api = axios.create({ baseURL: '/api' })
+import axios from "axios";
+import { ENV } from "@/config/env";
+import { useAuthStore } from "@/store";
 
-export const uploadDocument = (file: File, instructions: string) => {
-  const form = new FormData()
-  form.append('file', file)
-  form.append('instructions', instructions)
-  return api.post<{ job_id: string }>('/jobs', form)
-}
+const api = axios.create({
+  baseURL: ENV.BACKEND_URL,
+  timeout: 30000,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
 
-export const getJob = (jobId: string) =>
-  api.get<Job>(`/jobs/${jobId}`)
+// Request interceptor - add token to requests
+api.interceptors.request.use(
+  (config) => {
+    const token = useAuthStore.getState().token;
+    // In dev mode, use dev token bypass (server should accept it)
+    // In production, use real JWT token
+    if (token && token !== "dev-token-bypass") {
+      config.headers.Authorization = `Bearer ${token}`;
+    } else if (import.meta.env.DEV && token === "dev-token-bypass") {
+      // Dev mode: add dev token for local development
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
-export const toggleApproval = (jobId: string, suggestionId: string, approved: boolean) =>
-  api.patch(`/jobs/${jobId}/redactions/${suggestionId}`, { approved })
+// Response interceptor - handle errors and token refresh
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // In dev mode, errors are more lenient
+    if (error.response?.status === 401 && !import.meta.env.DEV) {
+      // Token expired or invalid (only in production)
+      useAuthStore.getState().logout();
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
 
-export const applyRedactions = (jobId: string) =>
-  api.post(`/jobs/${jobId}/redactions/apply`)
-
-export const chat = (req: ChatRequest) =>
-  api.post<ChatResponse>('/agent/chat', req)
-
-export interface Job {
-  job_id: string
-  status: 'pending' | 'processing' | 'complete' | 'failed'
-  suggestions: Suggestion[]
-  page_count?: number
-}
-
-export interface Suggestion {
-  id: string
-  text: string
-  category: string
-  reasoning: string
-  context: string
-  page_num: number
-  rects: Rect[]
-  approved: boolean
-  source: string
-}
-
-export interface Rect { x0: number; y0: number; x1: number; y1: number }
-
-export interface ChatRequest {
-  job_id: string
-  message: string
-  previous_response_id?: string
-}
-
-export interface ChatResponse {
-  text: string
-  response_id: string
-  tool_calls: unknown[]
-}
+export default api;

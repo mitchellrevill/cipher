@@ -102,12 +102,16 @@ class OpenAIRedactionClient:
 
     async def _respond(self, instructions: str, input_text: str) -> str:
         """Make a Responses API call and return output_text."""
+        # Avoid using the `text.format: json_object` option because some
+        # Responses API clients require the input messages to explicitly
+        # contain the word "json" when that mode is used. Rely on the
+        # instructions/request content to ask for JSON and parse the
+        # returned text instead.
         response = await self._client.responses.create(
             model=self._deployment,
             instructions=instructions,
             input=input_text,
             temperature=0.0,
-            text={"format": {"type": "json_object"}}
         )
         return response.output_text
 

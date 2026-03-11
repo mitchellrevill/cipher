@@ -21,9 +21,10 @@ class RedactionService:
     CONTAINER_NAME = "suggestions"
     PARTITION_KEY = "job_id"
 
-    def __init__(self, cosmos_client):
-        """Initialize RedactionService with Cosmos DB client."""
+    def __init__(self, cosmos_client, blob_client=None):
+        """Initialize RedactionService with Cosmos DB and optional Blob Storage clients."""
         self.cosmos_client = cosmos_client
+        self.blob_client = blob_client
         self.container = None
 
     async def _get_container(self):
@@ -80,10 +81,21 @@ class RedactionService:
             suggestion_id: Suggestion identifier
             approved: New approval status
         """
-        self.cosmos_client.update_item(
-            item=suggestion_id,
-            body={"approved": approved, "updated_at": datetime.utcnow().isoformat()}
-        )
+        if not self.blob_client:
+            raise Exception("Blob client not available for redaction updates")
+        
+        # Load suggestions from blob storage
+        suggestions = await self.blob_client.load_suggestions(job_id)
+        
+        # Find and update the suggestion
+        for sugg in suggestions:
+            if sugg.id == suggestion_id:
+                sugg.approved = approved
+                sugg.updated_at = datetime.utcnow()
+                break
+        
+        # Save updated suggestions back to blob storage
+        await self.blob_client.save_suggestions(job_id, suggestions)
 
     async def add_manual_suggestion(self, job_id: str, suggestion: Suggestion):
         """

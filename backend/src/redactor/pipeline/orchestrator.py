@@ -70,11 +70,30 @@ async def run_pipeline(
         config.azure_language_key
     ) if config.enable_pii_service else None
 
-    # Step 1: Analyse document and parse instructions concurrently
-    analysis, parsed_instructions = await asyncio.gather(
+    # Step 1: Analyse document and parse instructions concurrently.
+    # Use `return_exceptions=True` so missing external services (local dev)
+    # do not crash the whole pipeline — fall back to empty analysis or
+    # default parsed instructions when services are unavailable.
+    analysis_result, parsed_result = await asyncio.gather(
         doc_client.analyse(pdf_bytes),
-        oai_client.parse_instructions(user_instructions)
+        oai_client.parse_instructions(user_instructions),
+        return_exceptions=True
     )
+
+    # Handle analysis failure gracefully — nothing to process
+    if isinstance(analysis_result, Exception):
+        logger.error(f"Document analysis failed with {type(analysis_result).__name__}: {str(analysis_result)[:200]}")
+        logger.exception("Full document analysis error", exc_info=analysis_result)
+        return []
+
+    # Handle instruction parsing failure by using an empty config
+    if isinstance(parsed_result, Exception):
+        logger.exception("Instruction parsing failed; using defaults")
+        parsed_instructions = {}
+    else:
+        parsed_instructions = parsed_result
+
+    analysis = analysis_result
 
     pii_exceptions = {e.lower() for e in parsed_instructions.get("exceptions", [])}
     sensitive_rule = parsed_instructions.get("sensitive_content_rules")

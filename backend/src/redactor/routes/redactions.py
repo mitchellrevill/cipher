@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
 from redactor.models import JobStatus, RedactionRect, Suggestion
 from redactor.pdf.processor import PDFProcessor
-from redactor.storage.blob import BlobStorageClient
+from redactor.storage.blob import BlobStorageClient, get_blob_storage
 from redactor.config import get_settings
 from redactor.services.redaction_service import RedactionService
 from redactor.services.job_service import JobService
@@ -23,17 +23,22 @@ class ManualRedaction(BaseModel):
 
 
 def _get_blob(request: Request) -> BlobStorageClient:
-    return request.app.container.blob_client()
+    settings = get_settings()
+    return get_blob_storage(
+        settings.azure_storage_account_url,
+        settings.azure_storage_container,
+        account_key=settings.azure_storage_account_key or None,
+    )
 
 
 async def get_job_service(request: Request) -> JobService:
     """Get JobService from app container via dependency injection."""
-    return request.app.container.job_service()
+    return request.app.container.services.job_service()
 
 
 async def get_redaction_service(request: Request) -> RedactionService:
     """Get RedactionService from app container via dependency injection."""
-    return request.app.container.redaction_service()
+    return request.app.container.services.redaction_service()
 
 
 @router.post("/apply")

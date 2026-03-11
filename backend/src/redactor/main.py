@@ -30,32 +30,23 @@ async def lifespan(app: FastAPI):
         container = AppContainer()
         container.config.from_dict({
             'cosmos_endpoint': settings.cosmos_endpoint,
+            'cosmos_key': settings.cosmos_key,
             'azure_storage_account_url': settings.azure_storage_account_url,
+            'azure_storage_account_key': settings.azure_storage_account_key,
             'azure_openai_endpoint': settings.azure_openai_endpoint,
             'azure_openai_api_version': settings.azure_openai_api_version,
         })
 
-        # Initialize singleton clients
-        cosmos = container.cosmos_client()
-        blob = container.blob_client()
-        oai = container.oai_client()
-
-        # Initialize Cosmos DB collections if needed
-        try:
-            from redactor.db.cosmos_init import setup_cosmos_db
-            await setup_cosmos_db(
-                endpoint=settings.cosmos_endpoint,
-                db_name=settings.cosmos_db_name
-            )
-        except Exception as e:
-            logger.warning(f"Cosmos DB already initialized or setup skipped: {e}")
-
-        # Test connectivity (comment out if using Managed Identity in production)
-        logger.info("Testing service connectivity...")
-        logger.info("✓ Cosmos DB initialized")
-        logger.info("✓ Blob Storage initialized")
-        logger.info("✓ Azure OpenAI initialized")
-
+        # Initialize singleton clients (from clients subcontainer)
+        # Note: ClientsContainer exposes an inner `clients` subcontainer
+        # so the providers live at `container.clients.clients`.
+        # Creating some clients may trigger network calls (Cosmos SDK reads
+        # account metadata on init). Wrap creation in try/except to avoid
+        # failing app startup when credentials or RBAC are not available.
+        # Defer creating clients at startup to avoid network/RBAC/credential
+        # errors during import-time initialization. Clients will be created
+        # lazily when first requested by services or routes.
+        logger.info("Dependency container configured; deferring client creation until first use.")
         app.container = container
 
     except Exception as e:
@@ -68,20 +59,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down...")
 
     try:
-        # Close clients gracefully
-        if blob is not None and hasattr(blob, 'close'):
-            try:
-                await blob.close()
-            except (AttributeError, TypeError):
-                pass  # Client may not support async close
-
-        if cosmos is not None and hasattr(cosmos, 'close'):
-            try:
-                cosmos.close()
-            except (AttributeError, TypeError):
-                pass  # Client may not support sync close
-
-        logger.info("✓ Clients closed gracefully")
+        logger.info("✓ Shutdown complete")
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
 

@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from redactor.config import get_settings
 from redactor.models import Job, JobStatus
 from redactor.services.job_service import JobService
-from redactor.storage.blob import BlobStorageClient
+from redactor.storage.blob import BlobStorageClient, get_blob_storage
 from redactor.pipeline.orchestrator import run_pipeline
 
 router = APIRouter()
@@ -16,12 +16,18 @@ MAX_STREAM_SECONDS = 600  # 10 minutes
 
 def _get_blob(request: Request) -> BlobStorageClient:
     """Get BlobStorageClient from app container."""
-    return request.app.container.blob_client()
+    settings = get_settings()
+    return get_blob_storage(
+        settings.azure_storage_account_url,
+        settings.azure_storage_container,
+        account_key=settings.azure_storage_account_key or None,
+    )
 
 
 async def get_job_service(request: Request) -> JobService:
     """Get JobService from app container via dependency injection."""
-    return request.app.container.job_service()
+    # Services live under the `services` subcontainer on AppContainer
+    return request.app.container.services.job_service()
 
 
 async def _run_job(

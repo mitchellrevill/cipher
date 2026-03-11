@@ -19,16 +19,21 @@ class DocIntelligenceClient:
         Makes a single API call for the entire document.
         """
         try:
+            logger.info(f"Starting Document Intelligence analysis: endpoint={self._endpoint}, pdf_size={len(pdf_bytes)} bytes")
             async with _AsyncClient(
                 endpoint=self._endpoint,
                 credential=AzureKeyCredential(self._key)
             ) as client:
+                logger.info("Document Intelligence client created, beginning analysis...")
                 poller = await client.begin_analyze_document(
                     "prebuilt-layout",
                     body=pdf_bytes,
                     content_type="application/octet-stream"
                 )
-                return await poller.result()
-        except Exception:
-            logger.exception("Document Intelligence analysis failed")
+                logger.info("Waiting for analysis result...")
+                result = await poller.result()
+                logger.info(f"Analysis completed: {len(result.pages or [])} pages, {len(result.paragraphs or [])} paragraphs")
+                return result
+        except Exception as e:
+            logger.exception(f"Document Intelligence analysis failed: {type(e).__name__}: {str(e)}")
             raise  # Re-raise — caller needs to know the document couldn't be processed

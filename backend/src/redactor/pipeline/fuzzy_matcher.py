@@ -1,5 +1,6 @@
 from collections import defaultdict
 from rapidfuzz import fuzz
+import fitz  # PyMuPDF
 from redactor.models import RedactionRect
 
 SCALING_FACTOR = 72.0  # Document Intelligence returns inches; PDF uses points (72 per inch)
@@ -14,13 +15,25 @@ def _normalize(text: str) -> str:
 
 
 def _word_to_rect(word) -> RedactionRect | None:
-    """Convert a Document Intelligence word polygon (inches) to a RedactionRect (PDF points)."""
+    """Convert a Document Intelligence word polygon (inches) to a RedactionRect (PDF points).
+
+    Uses PyMuPDF's Quad class to properly handle the 4-point polygon geometry
+    before converting to axis-aligned bounding box.
+    """
     poly = getattr(word, "polygon", None)
     if not poly or len(poly) < 8:
         return None
-    xs = [poly[i] * SCALING_FACTOR for i in range(0, len(poly), 2)]
-    ys = [poly[i] * SCALING_FACTOR for i in range(1, len(poly), 2)]
-    return RedactionRect(x0=min(xs), y0=min(ys), x1=max(xs), y1=max(ys))
+
+    # Convert polygon points from inches to PDF points, creating fitz.Point objects
+    points = [
+        fitz.Point(poly[k] * SCALING_FACTOR, poly[k+1] * SCALING_FACTOR)
+        for k in range(0, len(poly), 2)
+    ]
+
+    # Use fitz.Quad to properly handle the polygon, then convert to rect
+    quad_rect = fitz.Quad(points).rect
+
+    return RedactionRect(x0=quad_rect.x0, y0=quad_rect.y0, x1=quad_rect.x1, y1=quad_rect.y1)
 
 
 def merge_line_rects(rects: list[RedactionRect]) -> list[RedactionRect]:

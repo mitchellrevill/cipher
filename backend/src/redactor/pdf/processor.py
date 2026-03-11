@@ -74,8 +74,11 @@ class PDFProcessor:
                     pdf_image = pdfium.PdfImage.new(new_doc)
                     pdf_image.load_jpeg(img_buf, inline=True)
 
-                    # PDF origin is bottom-left; scale image to full page dimensions
-                    matrix = pdfium.PdfMatrix().scale(page_width, page_height)
+                    # PDF origin is bottom-left; image origin is top-left
+                    # Must flip y-axis: scale with negative height, then translate
+                    matrix = pdfium.PdfMatrix()
+                    matrix.scale(page_width, -page_height)
+                    matrix.translate(0, page_height)
                     pdf_image.set_matrix(matrix)
 
                     new_page.insert_obj(pdf_image)

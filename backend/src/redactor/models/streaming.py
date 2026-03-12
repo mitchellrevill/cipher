@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from enum import Enum
 
 class PageProcessingStage(str, Enum):
@@ -16,13 +16,20 @@ class PageStatusEvent(BaseModel):
     stage_label: str  # Human-readable label
     error_message: str | None = None
 
+    @model_validator(mode='after')
+    def error_requires_message(self):
+        """Require error_message when status is ERROR."""
+        if self.status == PageProcessingStage.ERROR and not self.error_message:
+            raise ValueError("error_message is required when status=ERROR")
+        return self
+
 class SuggestionFoundEvent(BaseModel):
     """SSE event for newly discovered or updated suggestion."""
     id: str
     text: str
     category: str
     reasoning: str
-    page_nums: list[int]  # All pages where this suggestion was found
+    page_nums: list[int] = Field(min_length=1)  # All pages where this suggestion was found
     first_found_on: int   # Page where first discovered
 
 class StreamingEventPayload(BaseModel):

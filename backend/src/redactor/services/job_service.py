@@ -82,7 +82,7 @@ class JobService:
             result = self.cosmos_client.read_item(item=job_id, partition_key=job_id)
             job = self._doc_to_job(result)
             logger.info(f"Retrieved job {job_id} from Cosmos: status={job.status}, suggestions_count={job.suggestions_count}")
-            
+
             # Load suggestions from blob storage if available
             if self.blob_client:
                 logger.info(f"blob_client is available, attempting to load suggestions for {job_id}")
@@ -94,7 +94,7 @@ class JobService:
                     logger.warning(f"Failed to load suggestions for {job_id}: {type(e).__name__}: {str(e)[:100]}")
             else:
                 logger.warning(f"blob_client is None for job {job_id} - suggestions will not be loaded")
-            
+
             return job
         except Exception:
             return None

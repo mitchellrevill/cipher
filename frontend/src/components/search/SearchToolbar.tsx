@@ -1,6 +1,5 @@
 import { X, Search } from "lucide-react";
 import { Input } from "@/components/ui";
-import { cn } from "@/lib/utils";
 
 interface SearchToolbarProps {
   value: string;

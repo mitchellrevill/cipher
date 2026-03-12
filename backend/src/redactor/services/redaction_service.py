@@ -83,17 +83,17 @@ class RedactionService:
         """
         if not self.blob_client:
             raise Exception("Blob client not available for redaction updates")
-        
+
         # Load suggestions from blob storage
         suggestions = await self.blob_client.load_suggestions(job_id)
-        
+
         # Find and update the suggestion
         for sugg in suggestions:
             if sugg.id == suggestion_id:
                 sugg.approved = approved
                 sugg.updated_at = datetime.utcnow()
                 break
-        
+
         # Save updated suggestions back to blob storage
         await self.blob_client.save_suggestions(job_id, suggestions)
 
@@ -105,21 +105,21 @@ class RedactionService:
             job_id: Job identifier
             suggestion: Suggestion to add
         """
-        sugg_dict = {
-            "id": suggestion.id,
-            "job_id": job_id,
-            "text": suggestion.text,
-            "category": suggestion.category,
-            "reasoning": suggestion.reasoning,
-            "context": suggestion.context,
-            "page_num": suggestion.page_num,
-            "rects": [{"x0": r.x0, "y0": r.y0, "x1": r.x1, "y1": r.y1} for r in suggestion.rects],
-            "approved": suggestion.approved,
-            "source": "manual",
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
-        }
-        self.cosmos_client.create_item(body=sugg_dict)
+        if not self.blob_client:
+            raise Exception("Blob client not available for storing manual suggestions")
+
+        # Load existing suggestions from blob storage
+        try:
+            suggestions = await self.blob_client.load_suggestions(job_id)
+        except Exception:
+            # If no suggestions exist yet, start with empty list
+            suggestions = []
+
+        # Add the new manual suggestion to the list
+        suggestions.append(suggestion)
+
+        # Save all suggestions back to blob storage
+        await self.blob_client.save_suggestions(job_id, suggestions)
 
     async def delete_suggestion(self, job_id: str, suggestion_id: str):
         """

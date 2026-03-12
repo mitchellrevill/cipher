@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { RedactionRect, Suggestion } from "@/api/services";
 import type { TextMatch } from "@/types/search";
+import { SearchHighlightOverlay } from "@/components/search/SearchHighlightOverlay";
 
 GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
 
@@ -63,10 +64,10 @@ interface PdfDocumentViewerProps {
   selectedSuggestionId?: string | null;
   onSuggestionSelect?: (suggestionId: string) => void;
   onManualRedactionCreated?: (pageIndex: number, rect: RedactionRect) => void;
-  onApprovalChange?: (suggestionId: string, approved: boolean) => void;
   pageStatus?: Record<number, { stage: string; stageLabel: string; errorMessage?: string }>;
   searchMatches?: TextMatch[];
   onSearchMatchRedacted?: (match: TextMatch) => void;
+  onDocumentLoaded?: (document: PDFDocumentProxy | null) => void;
 }
 
 interface DraftRect {
@@ -137,7 +138,6 @@ function PdfPageCanvas({
   drawMode = false,
   onSuggestionSelect,
   onManualRedactionCreated,
-  onApprovalChange,
   pageStatus,
   searchMatches,
   onSearchMatchRedacted,
@@ -150,7 +150,6 @@ function PdfPageCanvas({
   drawMode?: boolean;
   onSuggestionSelect?: (suggestionId: string) => void;
   onManualRedactionCreated?: (pageIndex: number, rect: RedactionRect) => void;
-  onApprovalChange?: (suggestionId: string, approved: boolean) => void;
   pageStatus?: Record<number, { stage: string; stageLabel: string; errorMessage?: string }>;
   searchMatches?: TextMatch[];
   onSearchMatchRedacted?: (match: TextMatch) => void;
@@ -426,6 +425,17 @@ function PdfPageCanvas({
                 }}
               />
             ) : null}
+
+            {overlayViewport && searchMatches && searchMatches.length > 0 ? (
+              <SearchHighlightOverlay
+                matches={searchMatches}
+                onMatchClick={(match) => {
+                  onSearchMatchRedacted?.(match);
+                }}
+                viewport={overlayViewport}
+                pageNumber={pageNumber}
+              />
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -441,10 +451,10 @@ export function PdfDocumentViewer({
   selectedSuggestionId,
   onSuggestionSelect,
   onManualRedactionCreated,
-  onApprovalChange,
   pageStatus,
   searchMatches,
   onSearchMatchRedacted,
+  onDocumentLoaded,
 }: PdfDocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [documentHandle, setDocumentHandle] = useState<PDFDocumentProxy | null>(null);
@@ -479,6 +489,7 @@ export function PdfDocumentViewer({
         setDocumentHandle(null);
         setPageCount(0);
         setError(null);
+        onDocumentLoaded?.(null);
         return;
       }
 
@@ -490,12 +501,14 @@ export function PdfDocumentViewer({
         if (!cancelled) {
           setDocumentHandle(pdf);
           setPageCount(pdf.numPages);
+          onDocumentLoaded?.(pdf);
         }
       } catch {
         if (!cancelled) {
           setDocumentHandle(null);
           setPageCount(0);
           setError("Unable to load the PDF preview.");
+          onDocumentLoaded?.(null);
         }
       }
     }
@@ -569,7 +582,6 @@ export function PdfDocumentViewer({
                 onSuggestionSelect={onSuggestionSelect}
                 onManualRedactionCreated={onManualRedactionCreated}
                 onSearchMatchRedacted={onSearchMatchRedacted}
-                onApprovalChange={onApprovalChange}
                 pageStatus={pageStatus}
               />
             );

@@ -104,8 +104,9 @@ export default function DocumentsRoute() {
   const [viewerMode, setViewerMode] = useState<"original" | "redacted">("original");
   const [drawMode, setDrawMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [pdfDocument, setPdfDocument] = useState<any>(null);
   const { matches: searchMatches, totalMatches, isSearching: isSearching_fuzzy, error: searchError } = useFuzzySearch(
-    documentHandle,
+    pdfDocument,
     searchQuery
   );
   const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null);
@@ -803,9 +804,7 @@ export default function DocumentsRoute() {
                 });
               }
             }}
-            onApprovalChange={(suggestionId, approved) =>
-              approvalMutation.mutate({ suggestionId, approved })
-            }
+            onDocumentLoaded={setPdfDocument}
             pageStatus={Object.fromEntries(
               Object.entries(pageStatus).map(([num, status]) => [
                 parseInt(num, 10),

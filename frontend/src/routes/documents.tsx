@@ -306,6 +306,24 @@ export default function DocumentsRoute() {
     onError: (error) => toast.error(getApiErrorMessage(error, "Unable to update suggestion.")),
   });
 
+  const approveAllMutation = useMutation({
+    mutationFn: async () => {
+      const unapproved = sortedSuggestions.filter((s) => !s.approved);
+      const results = await Promise.all(
+        unapproved.map((s) =>
+          redactionJobService.updateSuggestionApproval(selectedJobId!, s.id, true)
+        )
+      );
+      return results;
+    },
+    onSuccess: async () => {
+      const unapprovedCount = sortedSuggestions.filter((s) => !s.approved).length;
+      await queryClient.invalidateQueries({ queryKey: ["redaction-job", selectedJobId] });
+      toast.success(`Approved ${unapprovedCount} suggestions.`);
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error, "Unable to approve all suggestions.")),
+  });
+
   const manualRedactionMutation = useMutation({
     mutationFn: ({ pageIndex, rect }: { pageIndex: number; rect: Suggestion["rects"][number] }) =>
       redactionJobService.addManualRedaction(selectedJobId!, pageIndex, [rect]),
@@ -702,6 +720,22 @@ export default function DocumentsRoute() {
                 <CheckSquare className="mr-1 h-3 w-3" />
               )}
               Apply {approvedCount > 0 ? `(${approvedCount})` : ""}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void approveAllMutation.mutateAsync()}
+              disabled={!activeJob || sortedSuggestions.length === 0 || sortedSuggestions.every((s) => s.approved) || approveAllMutation.isPending}
+              className="text-xs h-7"
+              title="Approve all unapproved suggestions (Ctrl+Shift+A)"
+            >
+              {approveAllMutation.isPending ? (
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+              ) : (
+                <CheckSquare className="mr-1 h-3 w-3" />
+              )}
+              Approve All
             </Button>
 
             <Button

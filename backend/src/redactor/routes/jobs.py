@@ -1,13 +1,17 @@
 import asyncio
 import uuid
+import json
+import logging
 from typing import Annotated
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Request, Depends
 from fastapi.responses import StreamingResponse
 from redactor.config import get_settings
-from redactor.models import Job, JobStatus
+from redactor.models import Job, JobStatus, PageStatusEvent, SuggestionFoundEvent
 from redactor.services.job_service import JobService
 from redactor.storage.blob import BlobStorageClient, get_blob_storage
 from redactor.pipeline.orchestrator import run_pipeline
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -113,6 +117,103 @@ async def stream_job_status(
                 await job_service.update_status(job_id, JobStatus.FAILED, "Processing timeout")
 
     return EventSourceResponse(event_generator())
+
+
+@router.get("/{job_id}/stream-analysis")
+async def stream_analysis(
+    job_id: str,
+    request: Request,
+    job_service: Annotated[JobService, Depends(get_job_service)] = None
+):
+    """
+    SSE endpoint for streaming redaction analysis.
+    Returns page_status and suggestion_found events as they occur.
+    """
+    settings = get_settings()
+    blob = _get_blob(request)
+
+    async def event_generator():
+        try:
+            # Get job and PDF
+            job = await job_service.get_job(job_id)
+            if not job:
+                yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
+                return
+
+            pdf_bytes = await blob.download_pdf(job_id)
+            if not pdf_bytes:
+                yield f"data: {json.dumps({'error': 'PDF not found'})}\n\n"
+                return
+
+            # Create clients
+            from redactor.pipeline.doc_intelligence import DocIntelligenceClient
+            from redactor.pipeline.pii_service import PIIServiceClient
+            from redactor.pipeline.openai_client import OpenAIRedactionClient
+            from redactor.pipeline.page_processor import StreamingPageProcessor
+
+            doc_client = DocIntelligenceClient(
+                settings.azure_doc_intel_endpoint,
+                settings.azure_doc_intel_key
+            )
+            oai_client = OpenAIRedactionClient(
+                settings.azure_openai_endpoint,
+                settings.azure_openai_key,
+                settings.azure_openai_deployment,
+                settings.azure_openai_api_version
+            )
+            pii_client = PIIServiceClient(
+                settings.azure_language_endpoint,
+                settings.azure_language_key
+            ) if settings.enable_pii_service else None
+
+            # Analyze document
+            logger.info(f"Stream analysis started for job {job_id}")
+            analysis = await doc_client.analyse(pdf_bytes)
+
+            # Parse instructions
+            parsed_instructions = await oai_client.parse_instructions(
+                job.instructions or ""
+            )
+            pii_exceptions = {e.lower() for e in parsed_instructions.get("exceptions", [])}
+            sensitive_rule = parsed_instructions.get("sensitive_content_rules")
+
+            # Create processor and stream events
+            processor = StreamingPageProcessor(
+                analysis=analysis,
+                pii_client=pii_client,
+                oai_client=oai_client,
+                config=settings,
+                batch_size=4,
+            )
+
+            async for event in processor.process_pages_streaming(
+                pii_exceptions=pii_exceptions,
+                sensitive_rule=sensitive_rule,
+            ):
+                # Serialize event to JSON
+                if isinstance(event, PageStatusEvent):
+                    event_type = "page_status"
+                    data = event.model_dump()
+                elif isinstance(event, SuggestionFoundEvent):
+                    event_type = "suggestion_found"
+                    data = event.model_dump()
+                else:
+                    continue
+
+                # Send as SSE
+                yield f"event: {event_type}\n"
+                yield f"data: {json.dumps(data)}\n\n"
+
+            # Send completion event
+            yield f"event: analysis_complete\n"
+            yield f"data: {json.dumps({'status': 'complete'})}\n\n"
+
+        except Exception as e:
+            logger.exception("Stream analysis error")
+            yield f"event: error\n"
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("/{job_id}/download")

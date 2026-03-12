@@ -3,6 +3,8 @@ from enum import Enum
 from typing import Literal, Optional, List
 from datetime import datetime
 
+# Existing models from original models.py
+
 class JobStatus(str, Enum):
     PENDING = "pending"
     PROCESSING = "processing"
@@ -57,3 +59,26 @@ class AgentSession(BaseModel):
     session_id: str
     job_id: str
     previous_response_id: Optional[str] = None
+
+# New streaming models
+
+from redactor.models.streaming import (
+    PageProcessingStage,
+    PageStatusEvent,
+    SuggestionFoundEvent,
+    StreamingEventPayload,
+)
+
+__all__ = [
+    "JobStatus",
+    "RedactionRect",
+    "Suggestion",
+    "Job",
+    "ChatMessage",
+    "ChatSession",
+    "AgentSession",
+    "PageProcessingStage",
+    "PageStatusEvent",
+    "SuggestionFoundEvent",
+    "StreamingEventPayload",
+]

@@ -6,9 +6,10 @@ interface StreamSuggestion {
   text: string;
   category: string;
   reasoning: string;
-  context: string;
+  context?: string;
   page_nums: number[];
   first_found_on: number;
+  rects?: Array<{ x0: number; y0: number; x1: number; y1: number }>;
 }
 
 export function useSuggestionStreamListener(
@@ -42,6 +43,14 @@ export function useSuggestionStreamListener(
           ...existing,
           page_num: newSuggestion.first_found_on,
           page_nums: newSuggestion.page_nums,
+          rects: newSuggestion.rects
+            ? newSuggestion.rects.map((r) => ({
+                x0: r.x0,
+                y0: r.y0,
+                x1: r.x1,
+                y1: r.y1,
+              }))
+            : existing.rects,
         };
         suggestionsMapRef.current[existingKey] = updated;
         return updated;
@@ -53,11 +62,18 @@ export function useSuggestionStreamListener(
           text: newSuggestion.text,
           category: newSuggestion.category,
           reasoning: newSuggestion.reasoning,
-          context: newSuggestion.context,
+          context: newSuggestion.context || "",
           page_num: newSuggestion.first_found_on,
           page_nums: newSuggestion.page_nums,
           approved: false,
-          rects: [], // Will be filled by actual API
+          rects: newSuggestion.rects
+            ? newSuggestion.rects.map((r) => ({
+                x0: r.x0,
+                y0: r.y0,
+                x1: r.x1,
+                y1: r.y1,
+              }))
+            : [],
           source: "ai",
           created_at: new Date().toISOString(),
         };

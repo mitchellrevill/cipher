@@ -164,6 +164,7 @@ class StreamingPageProcessor:
                             "reasoning": f"Identified as {entity.get('category', 'PII')}",
                             "page_nums": [page_num],
                             "first_found_on": page_num,
+                            "rects": [rect.model_dump() for rect in rects],
                         }
 
                     # Emit suggestion found event
@@ -175,6 +176,7 @@ class StreamingPageProcessor:
                         reasoning=sugg["reasoning"],
                         page_nums=sugg["page_nums"],
                         first_found_on=sugg["first_found_on"],
+                        rects=sugg["rects"],
                     )
                     events.append(event)
 

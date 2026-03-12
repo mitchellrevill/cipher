@@ -31,6 +31,7 @@ class SuggestionFoundEvent(BaseModel):
     reasoning: str
     page_nums: list[int] = Field(min_length=1)  # All pages where this suggestion was found
     first_found_on: int   # Page where first discovered
+    rects: list[dict] = []  # PDF coordinates [{"x0": float, "y0": float, "x1": float, "y1": float}]
 
 class StreamingEventPayload(BaseModel):
     """Union type for SSE event data."""

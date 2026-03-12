@@ -32,20 +32,24 @@ export function useSuggestionStreamListener(
         }
       );
 
+      // Ensure suggestion ID is valid - fallback to generated ID if missing
+      const suggestionId = newSuggestion.id || `${newSuggestion.text}-${newSuggestion.category}`;
+
       if (existingKey) {
         // Update existing suggestion with new pages
         const existing = suggestionsMapRef.current[existingKey];
+        // TODO: Full multi-page support - track all page_nums in future
+        // For now, use first_found_on which is the first page where suggestion appeared
         const updated: Suggestion = {
           ...existing,
           page_num: newSuggestion.first_found_on,
-          // Note: multi-page support will be handled via page_nums array in future
         };
         suggestionsMapRef.current[existingKey] = updated;
         return updated;
       } else {
         // New suggestion
         const sugg: Suggestion = {
-          id: newSuggestion.id,
+          id: suggestionId,
           job_id: jobId,
           text: newSuggestion.text,
           category: newSuggestion.category,
@@ -57,13 +61,16 @@ export function useSuggestionStreamListener(
           source: "ai",
           created_at: new Date().toISOString(),
         };
-        suggestionsMapRef.current[newSuggestion.id] = sugg;
+        suggestionsMapRef.current[suggestionId] = sugg;
         return sugg;
       }
     },
     []
   );
 
+  // Note: onPageStatusUpdate and onSuggestionFound should be memoized with useCallback()
+  // to prevent unnecessary EventSource reconnections. If they're recreated on each render,
+  // the effect will re-run and create a new EventSource connection even if jobId hasn't changed.
   useEffect(() => {
     if (!jobId) {
       if (eventSourceRef.current) {

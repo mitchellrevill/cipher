@@ -793,9 +793,14 @@ export default function DocumentsRoute() {
       {/* ── Right panel: suggestions + chat ── */}
       <div className="flex-shrink-0 w-72 xl:w-80 border-l border-border/60 flex flex-col overflow-hidden bg-background">
         <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/60">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Suggestions
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Suggestions
+            </span>
+            <span className="text-xs text-muted-foreground opacity-70" title="Keyboard shortcuts: A=Approve, R=Reject, ↑↓=Navigate, Ctrl+Shift+A=Approve All">
+              [A/R to approve/reject, ↑↓ to navigate]
+            </span>
+          </div>
           {activeJob && (
             <div className="flex items-center gap-2 flex-wrap">
               {isStreamConnected && (

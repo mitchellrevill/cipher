@@ -5,6 +5,7 @@ Manages CRUD operations for suggestions and approval state.
 Integrates with Cosmos DB for suggestion persistence.
 """
 
+from collections.abc import Iterable
 from typing import Optional, List
 from datetime import datetime
 from redactor.models import Suggestion
@@ -96,6 +97,47 @@ class RedactionService:
 
         # Save updated suggestions back to blob storage
         await self.blob_client.save_suggestions(job_id, suggestions)
+
+    async def bulk_update_approvals(
+        self,
+        job_id: str,
+        approved: bool,
+        suggestion_ids: Iterable[str] | None = None,
+    ) -> int:
+        """
+        Update approval status for many suggestions in a single blob read/write.
+
+        Args:
+            job_id: Job identifier
+            approved: New approval status
+            suggestion_ids: Optional iterable of suggestion identifiers to update.
+                When omitted, all suggestions that do not already match the target
+                approval state are updated.
+
+        Returns:
+            Number of suggestions updated
+        """
+        if not self.blob_client:
+            raise Exception("Blob client not available for redaction updates")
+
+        suggestions = await self.blob_client.load_suggestions(job_id)
+        suggestion_id_set = set(suggestion_ids) if suggestion_ids is not None else None
+        updated_count = 0
+        updated_at = datetime.utcnow()
+
+        for suggestion in suggestions:
+            matches_target = suggestion_id_set is None or suggestion.id in suggestion_id_set
+            if not matches_target or suggestion.approved == approved:
+                continue
+
+            suggestion.approved = approved
+            suggestion.updated_at = updated_at
+            updated_count += 1
+
+        if updated_count > 0:
+            await self.blob_client.save_suggestions(job_id, suggestions)
+
+        return updated_count
 
     async def add_manual_suggestion(self, job_id: str, suggestion: Suggestion):
         """

@@ -69,6 +69,7 @@ def mock_redaction_service():
     service.get_suggestions = AsyncMock(return_value=[])
     service.save_suggestions = AsyncMock(return_value=[])
     service.toggle_approval = AsyncMock(return_value=None)
+    service.bulk_update_approvals = AsyncMock(return_value=0)
     service.add_manual_suggestion = AsyncMock(return_value=None)
     return service
 
@@ -109,9 +110,9 @@ def mock_container(mock_job_service, mock_redaction_service, mock_agent_service,
 
     # Configure service properties (for direct access)
     container.services = MagicMock()
-    container.services.job_service = mock_job_service
-    container.services.redaction_service = mock_redaction_service
-    container.services.agent_service = mock_agent_service
+    container.services.job_service = MagicMock(return_value=mock_job_service)
+    container.services.redaction_service = MagicMock(return_value=mock_redaction_service)
+    container.services.agent_service = MagicMock(return_value=mock_agent_service)
 
     # Configure clients
     container.clients = MagicMock()

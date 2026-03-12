@@ -66,6 +66,7 @@ interface PdfDocumentViewerProps {
   onManualRedactionCreated?: (pageIndex: number, rect: RedactionRect) => void;
   pageStatus?: Record<number, { stage: string; stageLabel: string; errorMessage?: string }>;
   searchMatches?: TextMatch[];
+  activeSearchMatchId?: string | null;
   onSearchMatchRedacted?: (match: TextMatch) => void;
   onDocumentLoaded?: (document: PDFDocumentProxy | null) => void;
 }
@@ -140,6 +141,7 @@ function PdfPageCanvas({
   onManualRedactionCreated,
   pageStatus,
   searchMatches,
+  activeSearchMatchId,
   onSearchMatchRedacted,
 }: {
   pdfDocument: PDFDocumentProxy;
@@ -152,6 +154,7 @@ function PdfPageCanvas({
   onManualRedactionCreated?: (pageIndex: number, rect: RedactionRect) => void;
   pageStatus?: Record<number, { stage: string; stageLabel: string; errorMessage?: string }>;
   searchMatches?: TextMatch[];
+  activeSearchMatchId?: string | null;
   onSearchMatchRedacted?: (match: TextMatch) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -434,6 +437,7 @@ function PdfPageCanvas({
                 }}
                 viewport={overlayViewport}
                 pageNumber={pageNumber}
+                activeMatchId={activeSearchMatchId}
               />
             ) : null}
           </div>
@@ -453,6 +457,7 @@ export function PdfDocumentViewer({
   onManualRedactionCreated,
   pageStatus,
   searchMatches,
+  activeSearchMatchId,
   onSearchMatchRedacted,
   onDocumentLoaded,
 }: PdfDocumentViewerProps) {
@@ -521,6 +526,26 @@ export function PdfDocumentViewer({
     };
   }, [source?.url]);
 
+  useEffect(() => {
+    if (!activeSearchMatchId || !containerRef.current) {
+      return;
+    }
+
+    const activeElement = containerRef.current.querySelector<HTMLElement>(
+      `[data-search-match-id="${activeSearchMatchId}"]`
+    );
+
+    if (!activeElement) {
+      return;
+    }
+
+    activeElement.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+      inline: "nearest",
+    });
+  }, [activeSearchMatchId, source?.url, pageCount]);
+
   const prefersOneBasedPages = useMemo(() => {
     if (!pageCount || suggestions.length === 0) {
       return false;
@@ -577,6 +602,7 @@ export function PdfDocumentViewer({
                 renderWidth={renderWidth}
                 suggestions={pageSuggestions}
                 searchMatches={searchMatches}
+                activeSearchMatchId={activeSearchMatchId}
                 selectedSuggestionId={selectedSuggestionId}
                 drawMode={drawMode}
                 onSuggestionSelect={onSuggestionSelect}

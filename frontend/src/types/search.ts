@@ -19,10 +19,22 @@ export interface ExtractedText {
   text: string;
   items: Array<{
     text: string;
+    left: number;
+    top: number;
+    textWidth: number;
+    fontHeight: number;
+    angle: number;
     x0: number;
     y0: number;
-    width: number;
-    height: number;
+    x1: number;
+    y1: number;
+    segments: Array<{
+      text: string;
+      normalized: string;
+      start: number;
+      end: number;
+      rect: RedactionRect;
+    }>;
     fontName?: string;
   }>;
 }

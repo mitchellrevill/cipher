@@ -22,6 +22,11 @@ class ManualRedaction(BaseModel):
     rects: list[RedactionRect]
 
 
+class BulkApprovalResponse(BaseModel):
+    approved: bool
+    updated_count: int
+
+
 def _get_blob(request: Request) -> BlobStorageClient:
     settings = get_settings()
     return get_blob_storage(
@@ -119,3 +124,36 @@ async def toggle_approval(
             await redaction_service.toggle_approval(job_id, suggestion_id, update.approved)
             return {"id": suggestion_id, "approved": update.approved}
     raise HTTPException(status_code=404, detail="Suggestion not found")
+
+
+@router.post("/approve-all", response_model=BulkApprovalResponse)
+async def approve_all_suggestions(
+    job_id: str,
+    job_service: Annotated[JobService, Depends(get_job_service)],
+    redaction_service: Annotated[RedactionService, Depends(get_redaction_service)]
+):
+    """Approve all unapproved suggestions for a job in a single storage update."""
+    job = await job_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    updated_count = 0
+    updated_at = None
+    from datetime import datetime
+    for suggestion in job.suggestions:
+        if suggestion.approved:
+            continue
+
+        if updated_at is None:
+            updated_at = datetime.utcnow()
+
+        suggestion.approved = True
+        suggestion.updated_at = updated_at
+        updated_count += 1
+
+    persisted_count = await redaction_service.bulk_update_approvals(job_id, True)
+
+    return {
+        "approved": True,
+        "updated_count": max(updated_count, persisted_count),
+    }

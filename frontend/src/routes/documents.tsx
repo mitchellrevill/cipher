@@ -104,6 +104,7 @@ export default function DocumentsRoute() {
   const [viewerMode, setViewerMode] = useState<"original" | "redacted">("original");
   const [drawMode, setDrawMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeSearchMatchIndex, setActiveSearchMatchIndex] = useState(-1);
   const [pdfDocument, setPdfDocument] = useState<any>(null);
   const { matches: searchMatches, totalMatches, isSearching: isSearching_fuzzy, error: searchError } = useFuzzySearch(
     pdfDocument,
@@ -204,8 +205,30 @@ export default function DocumentsRoute() {
 
   const sortedSuggestions = useMemo(() => sortSuggestions(activeJob?.suggestions ?? []), [activeJob?.suggestions]);
   const approvedCount = useMemo(() => sortedSuggestions.filter((s) => s.approved).length, [sortedSuggestions]);
+  const activeSearchMatch = useMemo(
+    () =>
+      activeSearchMatchIndex >= 0 && activeSearchMatchIndex < searchMatches.length
+        ? searchMatches[activeSearchMatchIndex]
+        : null,
+    [activeSearchMatchIndex, searchMatches]
+  );
   const localPdfUrl = selectedJobId ? getLocalPdfUrl(selectedJobId) : null;
   const redactedPreviewUrl = selectedJobId ? redactedPreviewUrls[selectedJobId] : undefined;
+
+  useEffect(() => {
+    if (!searchQuery.trim() || searchMatches.length === 0) {
+      setActiveSearchMatchIndex(-1);
+      return;
+    }
+
+    setActiveSearchMatchIndex((currentIndex) => {
+      if (currentIndex >= 0 && currentIndex < searchMatches.length) {
+        return currentIndex;
+      }
+
+      return 0;
+    });
+  }, [searchMatches, searchQuery]);
 
   useEffect(() => {
     if (viewerMode === "original" && !localPdfUrl && redactedPreviewUrl) setViewerMode("redacted");
@@ -326,31 +349,93 @@ export default function DocumentsRoute() {
   });
 
   const approveAllMutation = useMutation({
-    mutationFn: async () => {
-      const unapproved = sortedSuggestions.filter((s) => !s.approved);
-      const results = await Promise.all(
-        unapproved.map((s) =>
-          redactionJobService.updateSuggestionApproval(selectedJobId!, s.id, true)
-        )
-      );
-      return results;
-    },
-    onSuccess: async () => {
-      const unapprovedCount = sortedSuggestions.filter((s) => !s.approved).length;
-      await queryClient.invalidateQueries({ queryKey: ["redaction-job", selectedJobId] });
-      toast.success(`Approved ${unapprovedCount} suggestions.`);
+    mutationFn: () => redactionJobService.approveAllSuggestions(selectedJobId!),
+    onSuccess: async ({ updated_count }) => {
+      queryClient.setQueryData<RedactionJob | undefined>(["redaction-job", selectedJobId], (currentJob) => {
+        if (!currentJob || updated_count === 0) {
+          return currentJob;
+        }
+
+        return {
+          ...currentJob,
+          suggestions: currentJob.suggestions.map((suggestion) =>
+            suggestion.approved
+              ? suggestion
+              : {
+                  ...suggestion,
+                  approved: true,
+                }
+          ),
+        };
+      });
+
+      if (updated_count > 0) {
+        toast.success(`Approved ${updated_count} suggestions.`);
+        return;
+      }
+
+      toast.success("All suggestions were already approved.");
     },
     onError: (error) => toast.error(getApiErrorMessage(error, "Unable to approve all suggestions.")),
   });
 
   const manualRedactionMutation = useMutation({
-    mutationFn: ({ pageIndex, rect }: { pageIndex: number; rect: Suggestion["rects"][number] }) =>
-      redactionJobService.addManualRedaction(selectedJobId!, pageIndex, [rect]),
+    mutationFn: ({ pageIndex, rects }: { pageIndex: number; rects: Suggestion["rects"] }) =>
+      redactionJobService.addManualRedaction(selectedJobId!, pageIndex, rects),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["redaction-job", selectedJobId] });
       toast.success("Manual redaction added.");
     },
     onError: (error) => toast.error(getApiErrorMessage(error, "Unable to save manual redaction.")),
+  });
+
+  const redactAllSearchMatchesMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedJobId) {
+        throw new Error("Select a job first.");
+      }
+
+      const matchesByPage = new Map<number, Suggestion["rects"]>();
+
+      for (const match of searchMatches) {
+        if (match.rects.length === 0) {
+          continue;
+        }
+
+        const existingRects = matchesByPage.get(match.pageNum) ?? [];
+        matchesByPage.set(match.pageNum, [...existingRects, ...match.rects]);
+      }
+
+      const pageEntries = Array.from(matchesByPage.entries());
+
+      if (pageEntries.length === 0) {
+        return { redactedMatches: 0, affectedPages: 0 };
+      }
+
+      await Promise.all(
+        pageEntries.map(([pageIndex, rects]) =>
+          redactionJobService.addManualRedaction(selectedJobId, pageIndex, rects)
+        )
+      );
+
+      return {
+        redactedMatches: searchMatches.length,
+        affectedPages: pageEntries.length,
+      };
+    },
+    onSuccess: async ({ redactedMatches, affectedPages }) => {
+      await queryClient.invalidateQueries({ queryKey: ["redaction-job", selectedJobId] });
+
+      if (redactedMatches === 0) {
+        toast.info("No search matches available to redact.");
+        return;
+      }
+
+      toast.success(
+        `Redacted ${redactedMatches} ${redactedMatches === 1 ? "instance" : "instances"} across ${affectedPages} ${affectedPages === 1 ? "page" : "pages"}.`
+      );
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error, "Unable to redact all search matches.")),
   });
 
   const applyMutation = useMutation({
@@ -465,6 +550,25 @@ export default function DocumentsRoute() {
     const trimmed = chatInput.trim();
     if (!trimmed || !selectedJobId || chatMutation.isPending) return;
     void chatMutation.mutateAsync(trimmed);
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery("");
+    setActiveSearchMatchIndex(-1);
+  };
+
+  const handleFindNextMatch = () => {
+    if (searchMatches.length === 0) {
+      return;
+    }
+
+    setActiveSearchMatchIndex((currentIndex) => {
+      if (currentIndex < 0) {
+        return 0;
+      }
+
+      return (currentIndex + 1) % searchMatches.length;
+    });
   };
 
   // ──────────────────────────────────────────────────
@@ -690,10 +794,15 @@ export default function DocumentsRoute() {
               <SearchToolbar
                 value={searchQuery}
                 onChange={setSearchQuery}
-                onClear={() => setSearchQuery("")}
+                onClear={handleClearSearch}
                 matchCount={totalMatches}
                 isSearching={isSearching_fuzzy}
                 error={searchError}
+                activeMatchIndex={activeSearchMatchIndex}
+                activeMatch={activeSearchMatch}
+                onFindNext={totalMatches > 0 ? handleFindNextMatch : undefined}
+                onRedactAllInstances={totalMatches > 0 ? () => void redactAllSearchMatchesMutation.mutateAsync() : undefined}
+                isRedactingAllInstances={redactAllSearchMatchesMutation.isPending}
               />
             </div>
           </div>
@@ -787,20 +896,20 @@ export default function DocumentsRoute() {
             source={viewerSource}
             suggestions={sortedSuggestions}
             searchMatches={searchMatches}
+            activeSearchMatchId={activeSearchMatch?.matchId ?? null}
             isLoading={jobQuery.isLoading}
             drawMode={drawMode && canDraw}
             selectedSuggestionId={selectedSuggestionId}
             onSuggestionSelect={setSelectedSuggestionId}
             onManualRedactionCreated={(pageIndex, rect) =>
-              manualRedactionMutation.mutate({ pageIndex, rect })
+              manualRedactionMutation.mutate({ pageIndex, rects: [rect] })
             }
             onSearchMatchRedacted={(match: TextMatch) => {
               // When user clicks a search match, create a manual redaction
-              const primaryRect = match.rects[0];
-              if (primaryRect) {
+              if (match.rects.length > 0) {
                 manualRedactionMutation.mutate({
                   pageIndex: match.pageNum,
-                  rect: primaryRect,
+                  rects: match.rects,
                 });
               }
             }}

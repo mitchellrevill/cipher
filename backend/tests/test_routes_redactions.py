@@ -50,6 +50,9 @@ def mock_container_redactions(mock_job_service_redactions, mock_redaction_servic
     container.job_service.return_value = mock_job_service_redactions
     container.redaction_service.return_value = mock_redaction_service
     container.blob_client.return_value = mock_blob_client
+    container.services = MagicMock()
+    container.services.job_service = MagicMock(return_value=mock_job_service_redactions)
+    container.services.redaction_service = MagicMock(return_value=mock_redaction_service)
     return container
 
 
@@ -122,6 +125,37 @@ async def test_toggle_suggestion_unknown_suggestion(test_app, mock_redaction_ser
     assert response.status_code == 404
 
 @pytest.mark.asyncio
+async def test_approve_all_suggestions_updates_unapproved_items(test_app, mock_redaction_service, seeded_job):
+    seeded_job.suggestions.extend([
+        Suggestion(
+            id="s2", job_id="job-test", text="Jane Smith", category="Person",
+            reasoning="PII", context="", page_num=1,
+            rects=[RedactionRect(x0=20, y0=20, x1=110, y1=40)], approved=False, created_at=datetime.utcnow()
+        ),
+        Suggestion(
+            id="s3", job_id="job-test", text="Account 1234", category="Financial",
+            reasoning="Sensitive", context="", page_num=2,
+            rects=[RedactionRect(x0=30, y0=30, x1=120, y1=50)], approved=False, created_at=datetime.utcnow()
+        ),
+    ])
+    mock_redaction_service.bulk_update_approvals.return_value = 2
+
+    async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+        response = await client.post("/api/jobs/job-test/redactions/approve-all")
+
+    assert response.status_code == 200
+    assert response.json() == {"approved": True, "updated_count": 2}
+    assert all(s.approved for s in seeded_job.suggestions)
+    mock_redaction_service.bulk_update_approvals.assert_awaited_once_with("job-test", True)
+
+@pytest.mark.asyncio
+async def test_approve_all_suggestions_handles_unknown_job(test_app, mock_redaction_service):
+    async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+        response = await client.post("/api/jobs/no-such-job/redactions/approve-all")
+
+    assert response.status_code == 404
+
+@pytest.mark.asyncio
 async def test_add_manual_redaction(test_app, mock_redaction_service):
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
         response = await client.post(
@@ -136,7 +170,7 @@ async def test_add_manual_redaction(test_app, mock_redaction_service):
 
 @pytest.mark.asyncio
 async def test_apply_redactions_returns_pdf(test_app, mock_blob_client):
-    with patch("redactor.routes.redactions.PDFProcessor") as MockPDF:
+    with patch("redactor.routes.redactions._get_blob", return_value=mock_blob_client), patch("redactor.routes.redactions.PDFProcessor") as MockPDF:
         MockPDF.return_value.apply_redactions.return_value = b"%PDF-redacted"
         async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
             response = await client.post("/api/jobs/job-test/redactions/apply")
@@ -144,7 +178,7 @@ async def test_apply_redactions_returns_pdf(test_app, mock_blob_client):
 
 @pytest.mark.asyncio
 async def test_apply_redactions_response_body(test_app, mock_blob_client):
-    with patch("redactor.routes.redactions.PDFProcessor") as MockPDF:
+    with patch("redactor.routes.redactions._get_blob", return_value=mock_blob_client), patch("redactor.routes.redactions.PDFProcessor") as MockPDF:
         MockPDF.return_value.apply_redactions.return_value = b"%PDF-redacted"
         async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
             response = await client.post("/api/jobs/job-test/redactions/apply")
@@ -174,7 +208,7 @@ async def test_apply_redactions_job_not_complete(test_app, mock_redaction_servic
 async def test_apply_redactions_with_none_approved(test_app, mock_blob_client, seeded_job):
     # Toggle s1 to unapproved first
     seeded_job.suggestions[0].approved = False
-    with patch("redactor.routes.redactions.PDFProcessor") as MockPDF:
+    with patch("redactor.routes.redactions._get_blob", return_value=mock_blob_client), patch("redactor.routes.redactions.PDFProcessor") as MockPDF:
         MockPDF.return_value.apply_redactions.return_value = b"%PDF-empty"
         async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
             response = await client.post("/api/jobs/job-test/redactions/apply")

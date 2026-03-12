@@ -59,6 +59,11 @@ export interface ApprovalUpdateResponse {
   approved: boolean;
 }
 
+export interface BulkApprovalResponse {
+  approved: boolean;
+  updated_count: number;
+}
+
 export interface AgentChatRequest {
   jobId: string;
   message: string;
@@ -114,6 +119,12 @@ class RedactionJobService {
     const response = await api.patch<ApprovalUpdateResponse>(`/api/jobs/${jobId}/redactions/${suggestionId}`, {
       approved,
     });
+
+    return response.data;
+  }
+
+  async approveAllSuggestions(jobId: string): Promise<BulkApprovalResponse> {
+    const response = await api.post<BulkApprovalResponse>(`/api/jobs/${jobId}/redactions/approve-all`);
 
     return response.data;
   }

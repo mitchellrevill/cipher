@@ -8,6 +8,7 @@ interface SearchHighlightOverlayProps {
   onMatchClick: (match: TextMatch) => void;
   viewport: PageViewport;
   pageNumber: number;
+  activeMatchId?: string | null;
 }
 
 export function SearchHighlightOverlay({
@@ -15,6 +16,7 @@ export function SearchHighlightOverlay({
   onMatchClick,
   viewport,
   pageNumber,
+  activeMatchId,
 }: SearchHighlightOverlayProps) {
   const [hoveredMatchId, setHoveredMatchId] = useState<string | null>(null);
 
@@ -23,9 +25,10 @@ export function SearchHighlightOverlay({
     return matches
       .filter((match) => match.pageNum === pageNumber - 1)
       .flatMap((match) =>
-        match.rects.map((rect) => ({
+        match.rects.map((rect, rectIndex) => ({
           matchId: match.matchId,
           text: match.text,
+          rectIndex,
           rect: rect,
           viewportRect: viewport.convertToViewportRectangle([
             rect.x0,
@@ -43,7 +46,7 @@ export function SearchHighlightOverlay({
 
   return (
     <>
-      {pageMatches.map(({ matchId, text, viewportRect }) => {
+      {pageMatches.map(({ matchId, text, rectIndex, viewportRect }) => {
         const [x0, y0, x1, y1] = viewportRect;
         const left = Math.min(x0, x1);
         const top = Math.min(y0, y1);
@@ -51,15 +54,19 @@ export function SearchHighlightOverlay({
         const height = Math.abs(y1 - y0);
 
         const isHovered = hoveredMatchId === matchId;
+        const isActive = activeMatchId === matchId;
 
         return (
           <div
-            key={matchId}
+            key={`${matchId}-${rectIndex}`}
+            data-search-match-id={matchId}
             className={cn(
-              "absolute border-2 transition-all cursor-pointer rounded-sm",
-              isHovered
-                ? "border-amber-600 bg-amber-300/25 shadow-[0_0_0_2px_rgba(217,119,6,0.3)]"
-                : "border-amber-500/70 bg-amber-300/10"
+              "absolute z-10 border-2 transition-all cursor-pointer rounded-sm",
+              isActive
+                ? "border-blue-400 bg-blue-400/30 shadow-[0_0_0_2px_rgba(96,165,250,0.45),0_0_0_6px_rgba(96,165,250,0.14)]"
+                : isHovered
+                  ? "border-blue-500 bg-blue-400/24 shadow-[0_0_0_2px_rgba(59,130,246,0.28)]"
+                  : "border-blue-500/80 bg-blue-400/14"
             )}
             style={{
               left: `${left}px`,
@@ -88,9 +95,16 @@ export function SearchHighlightOverlay({
               }
             }}
           >
-            {/* Tooltip on hover */}
-            {isHovered && (
-              <div className="absolute -top-8 left-0 bg-slate-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap pointer-events-none z-10">
+            {(isHovered || isActive) && (
+              <div
+                className={cn(
+                  "absolute left-0 max-w-56 rounded px-2 py-1 text-xs whitespace-nowrap pointer-events-none z-20",
+                  isActive
+                    ? "-top-9 bg-blue-500 text-blue-950 font-medium shadow-lg"
+                    : "-top-8 bg-slate-900 text-white"
+                )}
+                title={text}
+              >
                 {text}
               </div>
             )}

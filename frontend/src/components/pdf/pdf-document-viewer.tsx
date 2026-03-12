@@ -62,6 +62,7 @@ interface PdfDocumentViewerProps {
   isLoading?: boolean;
   drawMode?: boolean;
   selectedSuggestionId?: string | null;
+  focusPageRequest?: { pageNumber: number; requestId: number } | null;
   onSuggestionSelect?: (suggestionId: string) => void;
   onManualRedactionCreated?: (pageIndex: number, rect: RedactionRect) => void;
   pageStatus?: Record<number, { stage: string; stageLabel: string; errorMessage?: string }>;
@@ -453,6 +454,7 @@ export function PdfDocumentViewer({
   isLoading = false,
   drawMode = false,
   selectedSuggestionId,
+  focusPageRequest,
   onSuggestionSelect,
   onManualRedactionCreated,
   pageStatus,
@@ -546,6 +548,26 @@ export function PdfDocumentViewer({
     });
   }, [activeSearchMatchId, source?.url, pageCount]);
 
+  useEffect(() => {
+    if (!focusPageRequest || !containerRef.current) {
+      return;
+    }
+
+    const targetPage = containerRef.current.querySelector<HTMLElement>(
+      `[data-page-number="${focusPageRequest.pageNumber}"]`
+    );
+
+    if (!targetPage) {
+      return;
+    }
+
+    targetPage.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+      inline: "nearest",
+    });
+  }, [focusPageRequest?.pageNumber, focusPageRequest?.requestId, source?.url, pageCount]);
+
   const prefersOneBasedPages = useMemo(() => {
     if (!pageCount || suggestions.length === 0) {
       return false;
@@ -595,21 +617,22 @@ export function PdfDocumentViewer({
             );
 
             return (
-              <PdfPageCanvas
-                key={`${source?.url ?? "pdf"}-${index + 1}`}
-                pdfDocument={documentHandle}
-                pageNumber={index + 1}
-                renderWidth={renderWidth}
-                suggestions={pageSuggestions}
-                searchMatches={searchMatches}
-                activeSearchMatchId={activeSearchMatchId}
-                selectedSuggestionId={selectedSuggestionId}
-                drawMode={drawMode}
-                onSuggestionSelect={onSuggestionSelect}
-                onManualRedactionCreated={onManualRedactionCreated}
-                onSearchMatchRedacted={onSearchMatchRedacted}
-                pageStatus={pageStatus}
-              />
+              <div key={`${source?.url ?? "pdf"}-${index + 1}`} data-page-number={index + 1}>
+                <PdfPageCanvas
+                  pdfDocument={documentHandle}
+                  pageNumber={index + 1}
+                  renderWidth={renderWidth}
+                  suggestions={pageSuggestions}
+                  searchMatches={searchMatches}
+                  activeSearchMatchId={activeSearchMatchId}
+                  selectedSuggestionId={selectedSuggestionId}
+                  drawMode={drawMode}
+                  onSuggestionSelect={onSuggestionSelect}
+                  onManualRedactionCreated={onManualRedactionCreated}
+                  onSearchMatchRedacted={onSearchMatchRedacted}
+                  pageStatus={pageStatus}
+                />
+              </div>
             );
           })}
         </div>

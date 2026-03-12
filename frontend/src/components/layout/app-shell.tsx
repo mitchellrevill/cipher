@@ -112,7 +112,7 @@ export function AppShell({ children }: PropsWithChildren) {
   };
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex h-screen flex-col overflow-hidden">
       {/* Mobile bottom nav */}
       <nav
         aria-label="Primary"
@@ -355,7 +355,7 @@ export function AppShell({ children }: PropsWithChildren) {
           <ThemeToggle />
         </div>
         {/* Main content area */}
-        <div className="flex-1 min-h-0 overflow-auto">
+        <div className="flex-1 min-h-0 overflow-hidden">
           {children}
         </div>
       </div>

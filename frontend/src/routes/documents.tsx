@@ -2,7 +2,6 @@ import React, { startTransition, useCallback, useEffect, useMemo, useRef, useSta
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowUpFromLine,
-  Bot,
   CheckSquare,
   ChevronLeft,
   ChevronRight,
@@ -67,6 +66,12 @@ interface ConversationState {
 
 const EMPTY_CONVERSATION: ConversationState = { messages: [] };
 
+const AGENT_PROMPT_PRESETS = [
+  "Search this document for names, emails, and phone numbers I may have missed.",
+  "Find context-aware redactions around addresses, account numbers, and related references.",
+  "Summarize the riskiest pages and tell me where to jump next.",
+];
+
 function StatusBadge({ status }: { status: RecentJobRecord["status"] }) {
   const cls =
     status === "complete"
@@ -112,9 +117,11 @@ export default function DocumentsRoute() {
   );
   const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
+  const [pageJumpValue, setPageJumpValue] = useState("");
   const [chatByJob, setChatByJob] = useState<Record<string, ConversationState>>({});
   const [redactedPreviewUrls, setRedactedPreviewUrls] = useState<Record<string, string>>({});
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [focusPageRequest, setFocusPageRequest] = useState<{ pageNumber: number; requestId: number } | null>(null);
   const redactedPreviewUrlsRef = useRef<Record<string, string>>({});
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -212,6 +219,21 @@ export default function DocumentsRoute() {
         : null,
     [activeSearchMatchIndex, searchMatches]
   );
+  const pageCount = pdfDocument?.numPages ?? activeJob?.page_count ?? 0;
+  const prefersOneBasedSuggestionPages = useMemo(() => {
+    if (!pageCount || sortedSuggestions.length === 0) {
+      return false;
+    }
+
+    return (
+      sortedSuggestions.every((suggestion) => suggestion.page_num >= 1) &&
+      sortedSuggestions.some((suggestion) => suggestion.page_num === pageCount)
+    );
+  }, [pageCount, sortedSuggestions]);
+  const selectedSuggestion = useMemo(
+    () => sortedSuggestions.find((suggestion) => suggestion.id === selectedSuggestionId) ?? null,
+    [selectedSuggestionId, sortedSuggestions]
+  );
   const localPdfUrl = selectedJobId ? getLocalPdfUrl(selectedJobId) : null;
   const redactedPreviewUrl = selectedJobId ? redactedPreviewUrls[selectedJobId] : undefined;
 
@@ -267,6 +289,36 @@ export default function DocumentsRoute() {
   const canDraw = viewerMode === "original" && !!localPdfUrl && !!selectedJobId;
   const conversation = selectedJobId ? chatByJob[selectedJobId] ?? EMPTY_CONVERSATION : EMPTY_CONVERSATION;
   const isReviewMode = !!selectedJobId;
+
+  const getSuggestionViewerPageNumber = useCallback(
+    (suggestion: Suggestion | null) => {
+      if (!suggestion || pageCount <= 0) {
+        return null;
+      }
+
+      const rawPage = suggestion.page_nums?.[0] ?? suggestion.page_num;
+      const oneBasedPage = prefersOneBasedSuggestionPages ? rawPage : rawPage + 1;
+
+      return Math.max(1, Math.min(pageCount, oneBasedPage));
+    },
+    [pageCount, prefersOneBasedSuggestionPages]
+  );
+
+  const requestPageFocus = useCallback(
+    (pageNumber: number) => {
+      if (pageCount <= 0) {
+        return;
+      }
+
+      const normalizedPage = Math.max(1, Math.min(pageCount, Math.floor(pageNumber)));
+      setPageJumpValue(String(normalizedPage));
+      setFocusPageRequest((current) => ({
+        pageNumber: normalizedPage,
+        requestId: (current?.requestId ?? 0) + 1,
+      }));
+    },
+    [pageCount]
+  );
 
   // Initialize hotkeys for review mode
   useRedactionHotkeys({
@@ -552,6 +604,10 @@ export default function DocumentsRoute() {
     void chatMutation.mutateAsync(trimmed);
   };
 
+  const handleQuickPrompt = (prompt: string) => {
+    setChatInput(prompt);
+  };
+
   const handleClearSearch = () => {
     setSearchQuery("");
     setActiveSearchMatchIndex(-1);
@@ -571,12 +627,45 @@ export default function DocumentsRoute() {
     });
   };
 
+  const renderMessageWithPageTokens = useCallback(
+    (text: string) => {
+      const parts = text.split(/(\[\[page:\d+\]\])/g);
+      return parts.map((part, i) => {
+        const match = /^\[\[page:(\d+)\]\]$/.exec(part);
+        if (match) {
+          const page = parseInt(match[1], 10);
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => requestPageFocus(page)}
+              className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/20 transition-colors mx-0.5"
+            >
+              ↗ p.{page}
+            </button>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      });
+    },
+    [requestPageFocus]
+  );
+
+  const handleSuggestionSelect = (suggestion: Suggestion) => {
+    setSelectedSuggestionId(suggestion.id);
+
+    const targetPage = getSuggestionViewerPageNumber(suggestion);
+    if (targetPage) {
+      requestPageFocus(targetPage);
+    }
+  };
+
   // ──────────────────────────────────────────────────
   // UPLOAD MODE
   // ──────────────────────────────────────────────────
   if (!isReviewMode) {
     return (
-      <div className="flex min-h-full flex-col items-center justify-center px-4 py-16">
+      <div className="h-full overflow-auto flex flex-col items-center justify-center px-4 py-16">
         <div className="w-full max-w-lg space-y-8">
           {/* Header */}
           <div className="space-y-1 text-center">
@@ -891,7 +980,7 @@ export default function DocumentsRoute() {
         </div>
 
         {/* PDF Canvas */}
-        <div className="flex-1 overflow-hidden bg-muted/20">
+        <div className="flex-1 overflow-y-auto bg-muted/20">
           <PdfDocumentViewer
             source={viewerSource}
             suggestions={sortedSuggestions}
@@ -900,6 +989,7 @@ export default function DocumentsRoute() {
             isLoading={jobQuery.isLoading}
             drawMode={drawMode && canDraw}
             selectedSuggestionId={selectedSuggestionId}
+            focusPageRequest={focusPageRequest}
             onSuggestionSelect={setSelectedSuggestionId}
             onManualRedactionCreated={(pageIndex, rect) =>
               manualRedactionMutation.mutate({ pageIndex, rects: [rect] })
@@ -928,174 +1018,165 @@ export default function DocumentsRoute() {
         </div>
       </div>
 
-      {/* ── Right panel: suggestions + chat ── */}
-      <div className="flex-shrink-0 w-72 xl:w-80 border-l border-border/60 flex flex-col overflow-hidden bg-background">
-        <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/60">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Suggestions
-            </span>
-            <span className="text-xs text-muted-foreground opacity-70" title="Keyboard shortcuts: A=Approve, R=Reject, ↑↓=Navigate, Ctrl+Shift+A=Approve All">
-              [A/R to approve/reject, ↑↓ to navigate]
-            </span>
+      {/* ── Right panel ── */}
+      <div className="flex-shrink-0 w-[28rem] xl:w-[36rem] border-l border-border/60 flex flex-col overflow-hidden bg-background">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3">
+            {conversation.messages.length === 0 ? (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-border/60 bg-muted/20 p-3 text-sm text-muted-foreground">
+                  Ask the assistant to search, explain redactions, or jump to a page. It can output{" "}
+                  <code className="font-mono opacity-70">{"[[page:N]]"}</code> tokens to navigate directly.
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {AGENT_PROMPT_PRESETS.map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => handleQuickPrompt(prompt)}
+                      className="rounded-full border border-border/60 px-2.5 py-1.5 text-left text-[11px] leading-4 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              conversation.messages.map((msg, i) => (
+                <div
+                  key={`${msg.role}-${i}`}
+                  className={cn(
+                    "rounded-2xl px-3.5 py-3 text-sm leading-relaxed",
+                    msg.role === "assistant"
+                      ? "mr-10 border border-border/60 bg-muted/40 text-foreground"
+                      : "ml-12 bg-primary text-primary-foreground"
+                  )}
+                >
+                  {renderMessageWithPageTokens(msg.text)}
+                </div>
+              ))
+            )}
+            <div ref={chatEndRef} />
           </div>
-          {activeJob && (
-            <div className="flex items-center gap-2 flex-wrap">
-              {isStreamConnected && (
-                <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-amber-600 dark:bg-amber-400 animate-pulse" />
-                  Processing
-                </span>
-              )}
-              {getCurrentProcessingPage() !== null && (
-                <span className="text-xs text-muted-foreground">
-                  Page {getCurrentProcessingPage()! + 1}: {getStageLabel(getCurrentStage() as any)}...
-                </span>
-              )}
-              <span className="text-xs text-muted-foreground">
-                {approvedCount}/{sortedSuggestions.length} approved
+          <div className="flex-shrink-0 border-t border-border/60 px-4 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                Suggestions
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                {sortedSuggestions.length} total
               </span>
             </div>
-          )}
-        </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1.5">
-          {jobQuery.isLoading ? (
-            <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading…
-            </div>
-          ) : jobQuery.error ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {getApiErrorMessage(jobQuery.error, "Unable to load job.")}
-            </div>
-          ) : !activeJob ? (
-            <div className="px-3 py-4 text-xs text-muted-foreground">
-              No job data yet — still processing?
-            </div>
-          ) : sortedSuggestions.length === 0 ? (
-            <div className="px-3 py-4 text-xs text-muted-foreground flex items-center gap-2">
-              <Sparkles className="h-4 w-4" />
-              {activeJob.status === "complete" ? "No suggestions found." : "Waiting for analysis…"}
-            </div>
-          ) : (
-            sortedSuggestions.map((suggestion) => {
-              const isSelected = selectedSuggestionId === suggestion.id;
-              return (
-                <button
-                  key={suggestion.id}
-                  type="button"
-                  onClick={() => setSelectedSuggestionId(suggestion.id)}
-                  className={cn(
-                    "w-full rounded-xl border px-3 py-2.5 text-left text-xs transition-colors",
-                    isSelected
-                      ? "border-primary/30 bg-primary/5"
-                      : "border-border/60 hover:bg-muted/40"
-                  )}
-                >
-                  <div className="flex items-start gap-2">
-                    <Checkbox
-                      checked={suggestion.approved}
-                      onCheckedChange={(checked) =>
-                        approvalMutation.mutate({ suggestionId: suggestion.id, approved: checked === true })
-                      }
-                      onClick={(e) => e.stopPropagation()}
-                      className="mt-0.5 flex-shrink-0"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-foreground truncate">
-                        {suggestion.text || "Manual redaction"}
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
-                        {/* Show all pages where suggestion appears */}
-                        {suggestion.page_nums && suggestion.page_nums.length > 0 ? (
-                          <span className="text-muted-foreground text-xs">
-                            pp. {suggestion.page_nums.map(p => p + 1).join(", ")}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">p.{suggestion.page_num + 1}</span>
-                        )}
-                        <Badge variant="outline" className="rounded-full text-[10px] px-1.5 py-0 capitalize border-border/60">
-                          {suggestion.category}
-                        </Badge>
-                      </div>
-                      {suggestion.reasoning && (
-                        <div className="mt-1 text-muted-foreground line-clamp-2">{suggestion.reasoning}</div>
+            <div className="h-56 overflow-y-auto space-y-1.5 pr-1">
+              {jobQuery.isLoading ? (
+                <div className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Loading suggestions…
+                </div>
+              ) : jobQuery.error ? (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  {getApiErrorMessage(jobQuery.error, "Unable to load job.")}
+                </div>
+              ) : !activeJob ? (
+                <div className="rounded-xl border border-border/60 px-3 py-3 text-xs text-muted-foreground">
+                  No job data yet — still processing?
+                </div>
+              ) : sortedSuggestions.length === 0 ? (
+                <div className="rounded-xl border border-border/60 px-3 py-3 text-xs text-muted-foreground flex items-center gap-2">
+                  <Sparkles className="h-4 w-4" />
+                  {activeJob.status === "complete" ? "No suggestions found." : "Waiting for analysis…"}
+                </div>
+              ) : (
+                sortedSuggestions.map((suggestion) => {
+                  const isSelected = selectedSuggestionId === suggestion.id;
+                  const suggestionPageLabel =
+                    suggestion.page_nums && suggestion.page_nums.length > 0
+                      ? `pp. ${suggestion.page_nums.map((page) => page + 1).join(", ")}`
+                      : `p.${getSuggestionViewerPageNumber(suggestion) ?? suggestion.page_num + 1}`;
+
+                  return (
+                    <button
+                      key={suggestion.id}
+                      type="button"
+                      onClick={() => handleSuggestionSelect(suggestion)}
+                      className={cn(
+                        "w-full rounded-xl border px-2.5 py-2 text-left text-[11px] transition-colors",
+                        isSelected ? "border-primary/30 bg-primary/5" : "border-border/60 hover:bg-muted/40"
                       )}
-                    </div>
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        {/* Chat divider */}
-        <div className="border-t border-border/60 flex items-center gap-2 px-3 py-2">
-          <Bot className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Assistant</span>
-        </div>
-
-        {/* Chat messages */}
-        <div className="h-44 overflow-y-auto px-3 py-2 space-y-2">
-          {conversation.messages.length === 0 ? (
-            <div className="text-xs text-muted-foreground py-2">
-              Ask the assistant about this document…
+                    >
+                      <div className="flex items-start gap-2">
+                        <Checkbox
+                          checked={suggestion.approved}
+                          onCheckedChange={(checked) =>
+                            approvalMutation.mutate({ suggestionId: suggestion.id, approved: checked === true })
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                          className="mt-0.5 flex-shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium text-foreground">
+                            {suggestion.text || "Manual redaction"}
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap text-[10px] text-muted-foreground">
+                            <span>{suggestionPageLabel}</span>
+                            <Badge
+                              variant="outline"
+                              className="rounded-full border-border/60 px-1.5 py-0 text-[10px] capitalize"
+                            >
+                              {suggestion.category}
+                            </Badge>
+                          </div>
+                          {suggestion.reasoning ? (
+                            <div className="mt-1 line-clamp-2 text-muted-foreground">
+                              {suggestion.reasoning}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
             </div>
-          ) : (
-            conversation.messages.map((msg, i) => (
-              <div
-                key={`${msg.role}-${i}`}
-                className={cn(
-                  "rounded-xl px-3 py-2 text-xs leading-relaxed",
-                  msg.role === "assistant"
-                    ? "bg-muted/60 text-foreground"
-                    : "bg-primary text-primary-foreground ml-4"
-                )}
-              >
-                {msg.text}
-              </div>
-            ))
-          )}
-          <div ref={chatEndRef} />
-        </div>
+          </div>
 
-        {/* Prompt-kit chat input */}
-        <div className="border-t border-border/60 p-2">
-          <PromptInput
-            value={chatInput}
-            onValueChange={setChatInput}
-            onSubmit={handleChatSubmit}
-            isLoading={chatMutation.isPending}
-            disabled={!selectedJobId || chatMutation.isPending}
-            className="rounded-xl border-border/70 bg-muted/30"
-          >
-            <PromptInputTextarea
-              placeholder={selectedJobId ? "Ask about this document…" : "Select a job first"}
-              className="text-xs min-h-[36px]"
-            />
-            <PromptInputActions className="justify-end px-1 pb-1">
-              <PromptInputAction tooltip="Send message" side="top">
-                <button
-                  type="button"
-                  onClick={handleChatSubmit}
-                  disabled={!selectedJobId || chatInput.trim().length === 0 || chatMutation.isPending}
-                  className={cn(
-                    "flex h-7 w-7 items-center justify-center rounded-lg transition-colors",
-                    chatInput.trim().length > 0 && selectedJobId && !chatMutation.isPending
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                      : "bg-muted text-muted-foreground cursor-not-allowed"
-                  )}
-                >
-                  {chatMutation.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Send className="h-3.5 w-3.5" />
-                  )}
-                </button>
-              </PromptInputAction>
-            </PromptInputActions>
-          </PromptInput>
+          <div className="flex-shrink-0 border-t border-border/60 p-3">
+            <PromptInput
+              value={chatInput}
+              onValueChange={setChatInput}
+              onSubmit={handleChatSubmit}
+              isLoading={chatMutation.isPending}
+              disabled={!selectedJobId || chatMutation.isPending}
+              className="rounded-xl border-border/70 bg-muted/30"
+            >
+              <PromptInputTextarea
+                placeholder={selectedJobId ? "Ask about this document…" : "Select a job first"}
+                className="min-h-[44px] text-sm"
+              />
+              <PromptInputActions className="justify-end px-1 pb-1">
+                <PromptInputAction tooltip="Send message" side="top">
+                  <button
+                    type="button"
+                    onClick={handleChatSubmit}
+                    disabled={!selectedJobId || chatInput.trim().length === 0 || chatMutation.isPending}
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+                      chatInput.trim().length > 0 && selectedJobId && !chatMutation.isPending
+                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                        : "bg-muted text-muted-foreground cursor-not-allowed"
+                    )}
+                  >
+                    {chatMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                  </button>
+                </PromptInputAction>
+              </PromptInputActions>
+            </PromptInput>
+          </div>
         </div>
       </div>
     </div>

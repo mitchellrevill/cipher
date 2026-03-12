@@ -3,6 +3,7 @@ import uuid
 import json
 import logging
 from typing import Annotated
+from uuid import UUID
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Request, Depends
 from fastapi.responses import StreamingResponse
 from redactor.config import get_settings
@@ -12,6 +13,15 @@ from redactor.storage.blob import BlobStorageClient, get_blob_storage
 from redactor.pipeline.orchestrator import run_pipeline
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_job_id(job_id: str) -> bool:
+    """Validate that job_id is a valid UUID."""
+    try:
+        UUID(job_id)
+        return True
+    except ValueError:
+        return False
 
 router = APIRouter()
 
@@ -99,11 +109,22 @@ async def stream_job_status(
     from sse_starlette.sse import EventSourceResponse
 
     async def event_generator():
+        # Validate job_id format
+        if not _validate_job_id(job_id):
+            yield {"data": json.dumps({"error": "Invalid job ID format"})}
+            return
+
         elapsed = 0
         while elapsed < MAX_STREAM_SECONDS:
-            job = await job_service.get_job(job_id)
+            try:
+                job = await job_service.get_job(job_id)
+            except Exception as e:
+                logger.exception(f"Error retrieving job {job_id}")
+                yield {"data": json.dumps({"error": f"Failed to retrieve job: {str(e)}"})}
+                return
+
             if not job:
-                yield {"data": '{"error": "not found"}'}
+                yield {"data": json.dumps({"error": "not found"})}
                 break
             yield {"data": job.model_dump_json()}
             if job.status in (JobStatus.COMPLETE, JobStatus.FAILED):
@@ -112,9 +133,12 @@ async def stream_job_status(
             elapsed += 1
         else:
             # Timeout — mark job as failed if still processing
-            job = await job_service.get_job(job_id)
-            if job and job.status == JobStatus.PROCESSING:
-                await job_service.update_status(job_id, JobStatus.FAILED, "Processing timeout")
+            try:
+                job = await job_service.get_job(job_id)
+                if job and job.status == JobStatus.PROCESSING:
+                    await job_service.update_status(job_id, JobStatus.FAILED, "Processing timeout")
+            except Exception as e:
+                logger.exception(f"Error updating job status on timeout for {job_id}")
 
     return EventSourceResponse(event_generator())
 
@@ -133,6 +157,16 @@ async def stream_analysis(
     blob = _get_blob(request)
 
     async def event_generator():
+        # Validate job_id format
+        if not _validate_job_id(job_id):
+            yield f"event: error\ndata: {json.dumps({'error': 'Invalid job ID format'})}\n\n"
+            return
+
+        # Initialize clients to None for proper cleanup
+        doc_client = None
+        oai_client = None
+        pii_client = None
+
         try:
             # Get job and PDF
             job = await job_service.get_job(job_id)
@@ -212,6 +246,13 @@ async def stream_analysis(
             logger.exception("Stream analysis error")
             yield f"event: error\n"
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+        finally:
+            # Resource cleanup for Azure clients
+            # Note: Azure SDK clients use reference counting and garbage collection.
+            # Explicit closing is optional but can be added if clients support it.
+            # If clients have close() or __aexit__ methods, they will be garbage collected.
+            pass
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

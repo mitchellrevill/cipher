@@ -114,6 +114,8 @@ class AgentService:
         """
         try:
             job = await self.job_service.get_job(job_id)
+            if session_id and workspace_id and session_id in self.sessions:
+                self.sessions[session_id]["workspace_id"] = workspace_id
             active_workspace_id = workspace_id or self._get_session_workspace_id(session_id)
             workspace_context = await self._load_workspace_context(active_workspace_id)
             session_messages = self.sessions.get(session_id, {}).get("messages", []) if session_id else []
@@ -121,6 +123,7 @@ class AgentService:
             if self.orchestrator is not None:
                 response = await self.orchestrator.run_turn(
                     user_message=message,
+                    job_id=job_id,
                     workspace_context=workspace_context,
                     session_messages=session_messages,
                 )
@@ -162,7 +165,26 @@ class AgentService:
             return None
 
         try:
-            return await self.workspace_service.get_workspace_state(workspace_id)
+            workspace = await self.workspace_service.get_workspace_state(workspace_id)
+            if not workspace:
+                return None
+
+            enriched_documents = []
+            for document in workspace.get("documents", []):
+                document_id = document.get("id")
+                job = await self.job_service.get_job(document_id) if document_id else None
+                enriched_documents.append(
+                    {
+                        **document,
+                        "filename": getattr(job, "filename", None) if job else None,
+                        "status": getattr(getattr(job, "status", None), "value", None) if job else None,
+                        "page_count": getattr(job, "page_count", 0) if job else 0,
+                        "suggestions_count": len(getattr(job, "suggestions", [])) if job else 0,
+                    }
+                )
+
+            workspace["documents"] = enriched_documents
+            return workspace
         except Exception:
             return None
 

@@ -6,6 +6,7 @@ from redactor.services.job_service import JobService
 from redactor.services.redaction_service import RedactionService
 from redactor.services.blob_service import BlobService
 from redactor.services.agent_service import AgentService
+from redactor.services.rule_engine import RuleEngine
 from redactor.services.workspace_service import WorkspaceService
 
 
@@ -195,13 +196,24 @@ def _create_workspace_service(cosmos_client):
     return WorkspaceService(cosmos_client=cosmos_client)
 
 
-def _create_orchestrated_agent_service(oai_client, job_service, workspace_service):
+def _create_rule_engine():
+    """Factory function to create RuleEngine."""
+    return RuleEngine()
+
+
+def _create_orchestrated_agent_service(oai_client, job_service, redaction_service, workspace_service, rule_engine):
     """Factory function to create AgentService with workspace-aware orchestration."""
     return AgentService(
         oai_client=oai_client,
         job_service=job_service,
         workspace_service=workspace_service,
-        orchestrator=RedactionOrchestrator(oai_client=oai_client),
+        orchestrator=RedactionOrchestrator(
+            oai_client=oai_client,
+            job_service=job_service,
+            redaction_service=redaction_service,
+            workspace_service=workspace_service,
+            rule_engine=rule_engine,
+        ),
     )
 
 
@@ -240,9 +252,13 @@ class ServicesContainer(containers.DeclarativeContainer):
         cosmos_client=providers.Callable(_safe_get_cosmos_account, clients)
     )
 
+    rule_engine = providers.Factory(_create_rule_engine)
+
     agent_service = providers.Factory(
         _create_orchestrated_agent_service,
         oai_client=providers.Callable(lambda c: c.clients.oai_client(), clients),
         job_service=job_service,
+        redaction_service=redaction_service,
         workspace_service=workspace_service,
+        rule_engine=rule_engine,
     )

@@ -43,6 +43,8 @@ class Job(BaseModel):
     completed_at: Optional[datetime] = None
     user_id: Optional[str] = None
     suggestions_count: int = 0
+    instructions: Optional[str] = None
+    workspace_id: Optional[str] = None
 
 class ChatMessage(BaseModel):
     role: str  # "user" or "assistant"

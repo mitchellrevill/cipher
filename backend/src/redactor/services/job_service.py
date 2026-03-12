@@ -37,7 +37,14 @@ class JobService:
             pass
         return self.container
 
-    async def create_job(self, job_id: str, filename: str, user_id: Optional[str] = None) -> Job:
+    async def create_job(
+        self,
+        job_id: str,
+        filename: str,
+        user_id: Optional[str] = None,
+        instructions: Optional[str] = None,
+        workspace_id: Optional[str] = None,
+    ) -> Job:
         """
         Create a new job.
 
@@ -60,7 +67,9 @@ class JobService:
             "created_at": now.isoformat(),
             "completed_at": None,
             "user_id": user_id,
-            "suggestions_count": 0
+            "suggestions_count": 0,
+            "instructions": instructions or "",
+            "workspace_id": workspace_id,
         }
 
         # Create item in Cosmos DB
@@ -175,5 +184,7 @@ class JobService:
             created_at=created_at,
             completed_at=completed_at,
             user_id=doc.get("user_id"),
-            suggestions_count=doc.get("suggestions_count", 0)
+            suggestions_count=doc.get("suggestions_count", 0),
+            instructions=doc.get("instructions"),
+            workspace_id=doc.get("workspace_id"),
         )

@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from redactor.pipeline.orchestrator import run_pipeline
 from redactor.config import Settings
 from redactor.agent.orchestrator import RedactionOrchestrator
+from redactor.models import Job, JobStatus, RedactionRect, Suggestion
+from datetime import datetime
 
 @pytest.fixture
 def test_settings():
@@ -92,9 +94,54 @@ async def test_run_pipeline_returns_empty_when_no_findings(test_settings, mock_a
 @pytest.mark.asyncio
 async def test_redaction_orchestrator_initialization():
     mock_oai_client = AsyncMock()
+    mock_job_service = AsyncMock()
+    mock_redaction_service = AsyncMock()
 
-    orchestrator = RedactionOrchestrator(oai_client=mock_oai_client)
+    orchestrator = RedactionOrchestrator(
+        oai_client=mock_oai_client,
+        job_service=mock_job_service,
+        redaction_service=mock_redaction_service,
+    )
 
-    assert orchestrator.oai_client is not None
+    assert orchestrator.oai_client is mock_oai_client
     assert len(orchestrator.tools) > 0
     assert orchestrator.system_prompt is not None
+
+
+@pytest.mark.asyncio
+async def test_redaction_orchestrator_search_returns_directives():
+    mock_oai_client = AsyncMock()
+    mock_job_service = AsyncMock()
+    mock_redaction_service = AsyncMock()
+
+    suggestion = Suggestion(
+        id="s1",
+        job_id="job-1",
+        text="john@example.com",
+        category="Contact",
+        reasoning="Email detected",
+        context="Please contact john@example.com for updates.",
+        page_num=0,
+        rects=[RedactionRect(x0=0, y0=0, x1=1, y1=1)],
+        approved=False,
+        source="ai",
+        created_at=datetime.utcnow(),
+    )
+    mock_job_service.get_job.return_value = Job(
+        job_id="job-1",
+        filename="sample.pdf",
+        status=JobStatus.COMPLETE,
+        suggestions=[suggestion],
+    )
+
+    orchestrator = RedactionOrchestrator(
+        oai_client=mock_oai_client,
+        job_service=mock_job_service,
+        redaction_service=mock_redaction_service,
+    )
+
+    result = await orchestrator.run_turn(user_message='Find "john@example.com"', job_id="job-1")
+
+    assert "Found 1 match" in result["text"]
+    assert any(directive["type"] == "jump_to_page" for directive in result["directives"])
+    assert result["tool_calls"][0]["name"] == "search_document"

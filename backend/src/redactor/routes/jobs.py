@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from redactor.config import get_settings
 from redactor.models import Job, JobStatus, PageStatusEvent, SuggestionFoundEvent
 from redactor.services.job_service import JobService
+from redactor.services.workspace_service import WorkspaceService
 from redactor.storage.blob import BlobStorageClient, get_blob_storage
 from redactor.pipeline.orchestrator import run_pipeline
 
@@ -44,6 +45,10 @@ async def get_job_service(request: Request) -> JobService:
     return request.app.container.services.job_service()
 
 
+async def get_workspace_service(request: Request) -> WorkspaceService:
+    return request.app.container.services.workspace_service()
+
+
 async def _run_job(
     job_id: str,
     pdf_bytes: bytes,
@@ -69,14 +74,28 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     instructions: str = Form(default=""),
-    job_service: Annotated[JobService, Depends(get_job_service)] = None
+    workspace_id: str = Form(default=""),
+    job_service: Annotated[JobService, Depends(get_job_service)] = None,
+    workspace_service: Annotated[WorkspaceService, Depends(get_workspace_service)] = None,
 ):
     """Upload a document for redaction."""
     job_id = str(uuid.uuid4())
     pdf_bytes = await file.read()
 
     # Create job via service
-    job = await job_service.create_job(job_id=job_id, filename=file.filename)
+    normalized_workspace_id = workspace_id or None
+    job = await job_service.create_job(
+        job_id=job_id,
+        filename=file.filename,
+        instructions=instructions,
+        workspace_id=normalized_workspace_id,
+    )
+
+    if normalized_workspace_id:
+        try:
+            await workspace_service.add_document(normalized_workspace_id, job_id)
+        except Exception as exc:
+            logger.warning("Failed to add uploaded document %s to workspace %s: %s", job_id, normalized_workspace_id, exc)
 
     # Upload PDF to blob storage
     blob = _get_blob(request)

@@ -38,11 +38,10 @@ export function useSuggestionStreamListener(
       if (existingKey) {
         // Update existing suggestion with new pages
         const existing = suggestionsMapRef.current[existingKey];
-        // TODO: Full multi-page support - track all page_nums in future
-        // For now, use first_found_on which is the first page where suggestion appeared
         const updated: Suggestion = {
           ...existing,
           page_num: newSuggestion.first_found_on,
+          page_nums: newSuggestion.page_nums,
         };
         suggestionsMapRef.current[existingKey] = updated;
         return updated;
@@ -56,6 +55,7 @@ export function useSuggestionStreamListener(
           reasoning: newSuggestion.reasoning,
           context: newSuggestion.context,
           page_num: newSuggestion.first_found_on,
+          page_nums: newSuggestion.page_nums,
           approved: false,
           rects: [], // Will be filled by actual API
           source: "ai",

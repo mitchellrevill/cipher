@@ -27,6 +27,13 @@ async def lifespan(app: FastAPI):
 
     try:
         settings = get_settings()
+        # log a couple of key values so we can see what actually loaded
+        logger.info("Loaded settings:")
+        logger.info(f"  azure_storage_account_url={settings.azure_storage_account_url!r}")
+        logger.info(f"  azure_storage_account_key={'<redacted>' if settings.azure_storage_account_key else None}")
+        logger.info(f"  cosmos_endpoint={settings.cosmos_endpoint!r}")
+        logger.info(f"  azure_openai_endpoint={settings.azure_openai_endpoint!r}")
+
         container = AppContainer()
         container.config.from_dict({
             'cosmos_endpoint': settings.cosmos_endpoint,

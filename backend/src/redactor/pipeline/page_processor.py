@@ -32,6 +32,7 @@ class StreamingPageProcessor:
         self,
         page_num: int,
         stage: PageProcessingStage,
+        error_message: str | None = None,
     ) -> PageStatusEvent:
         """Create a page status event."""
         stage_labels = {
@@ -45,6 +46,7 @@ class StreamingPageProcessor:
             page_num=page_num,
             status=stage,
             stage_label=stage_labels[stage],
+            error_message=error_message,
         )
 
     async def process_pages_streaming(
@@ -230,8 +232,8 @@ class StreamingPageProcessor:
             yield_event = await self.emit_page_status(
                 page_num,
                 PageProcessingStage.ERROR,
+                error_message=str(e),
             )
-            yield_event.error_message = str(e)
             events.append(yield_event)
 
         return events

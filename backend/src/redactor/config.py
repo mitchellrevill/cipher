@@ -2,9 +2,26 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 import json
+import os
+import logging
+
+# Determine absolute path to backend/.env so settings load regardless of cwd.
+# Uvicorn's reloader often changes the working directory to ``backend/src`` which
+# would make a relative ".env" file invisible. By computing the path from this
+# module's location we ensure the file is always found.
+root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+env_path = os.path.join(root, ".env")
+if not os.path.exists(env_path):
+    logging.getLogger(__name__).warning(
+        f".env file not found at {env_path}; environment variables may be missing"
+    )
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=env_path,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # Azure Document Intelligence
     azure_doc_intel_endpoint: str = ""

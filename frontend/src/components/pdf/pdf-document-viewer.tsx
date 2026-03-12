@@ -76,6 +76,9 @@ interface OverlayBox extends DraftRect {
   id: string;
   approved: boolean;
   source: Suggestion["source"];
+  text: string;
+  category: string;
+  reasoning: string;
 }
 
 function getDocumentPageIndex(pageNum: number, pageCount: number, prefersOneBased: boolean): number {
@@ -124,6 +127,7 @@ function PdfPageCanvas({
   const [viewport, setViewport] = useState<PageViewport | null>(null);
   const [draftRect, setDraftRect] = useState<DraftRect | null>(null);
   const [isRendering, setIsRendering] = useState(true);
+  const [hoveredBoxId, setHoveredBoxId] = useState<string | null>(null);
   const overlayViewport = useMemo(() => viewport?.clone({ dontFlip: true }) ?? null, [viewport]);
 
   useEffect(() => {
@@ -195,6 +199,9 @@ function PdfPageCanvas({
         id: suggestion.id,
         approved: suggestion.approved,
         source: suggestion.source,
+        text: suggestion.text,
+        category: suggestion.category,
+        reasoning: suggestion.reasoning,
       }))
     );
   }, [overlayViewport, suggestions]);
@@ -306,27 +313,83 @@ function PdfPageCanvas({
           >
             {overlayBoxes.map((box, index) => {
               const isSelected = selectedSuggestionId === box.id;
+              const isHovered = hoveredBoxId === box.id;
+
               return (
-                <button
+                <div
                   key={`${box.id}-${index}`}
-                  type="button"
-                  className={cn(
-                    "absolute rounded-sm border transition-all",
-                    box.approved
-                      ? "border-emerald-500/90 bg-emerald-400/18"
-                      : "border-amber-500/90 bg-amber-300/18",
-                    box.source === "manual" && "border-sky-500/90 bg-sky-400/18",
-                    isSelected && "ring-2 ring-offset-1 ring-slate-950/35"
-                  )}
+                  className="group absolute"
                   style={{
                     left: `${box.left}px`,
                     top: `${box.top}px`,
                     width: `${box.width}px`,
                     height: `${box.height}px`,
                   }}
-                  onClick={() => onSuggestionSelect?.(box.id)}
-                  title={box.id}
-                />
+                  onMouseEnter={() => {
+                    setHoveredBoxId(box.id);
+                    onSuggestionSelect?.(box.id);
+                  }}
+                  onMouseLeave={() => setHoveredBoxId(null)}
+                >
+                  {/* Rect button */}
+                  <button
+                    type="button"
+                    className={cn(
+                      "absolute inset-0 rounded-sm border transition-all",
+                      box.approved
+                        ? "border-emerald-500/90 bg-emerald-400/18"
+                        : "border-amber-500/90 bg-amber-300/18",
+                      box.source === "manual" && "border-sky-500/90 bg-sky-400/18",
+                      isSelected && "ring-2 ring-offset-1 ring-slate-950/35"
+                    )}
+                    onClick={() => onSuggestionSelect?.(box.id)}
+                  />
+
+                  {/* Hover actions and tooltip */}
+                  {isHovered && (
+                    <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/10 rounded-sm backdrop-blur-xs z-10">
+                      {/* Approve button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Will wire this to mutation in documents.tsx
+                        }}
+                        className="flex h-6 w-6 items-center justify-center rounded bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
+                        title="Approve (A)"
+                      >
+                        ✓
+                      </button>
+                      {/* Reject button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Will wire this to mutation in documents.tsx
+                        }}
+                        className="flex h-6 w-6 items-center justify-center rounded bg-red-500 text-white hover:bg-red-600 transition-colors"
+                        title="Reject (R)"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Tooltip on hover */}
+                  {isHovered && (
+                    <div className="absolute left-full ml-2 top-0 z-20 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap shadow-lg pointer-events-none">
+                      <div className="font-semibold mb-1">{box.text || "Manual redaction"}</div>
+                      <div className="text-slate-300 mb-0.5">
+                        <span className="inline-block bg-slate-700/50 px-1.5 py-0.5 rounded text-[10px] mr-1">
+                          {box.category}
+                        </span>
+                      </div>
+                      <div className="text-slate-400 text-xs max-w-xs">
+                        {box.reasoning}
+                      </div>
+                    </div>
+                  )}
+                </div>
               );
             })}
 

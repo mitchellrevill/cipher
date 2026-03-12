@@ -62,6 +62,7 @@ interface PdfDocumentViewerProps {
   selectedSuggestionId?: string | null;
   onSuggestionSelect?: (suggestionId: string) => void;
   onManualRedactionCreated?: (pageIndex: number, rect: RedactionRect) => void;
+  onApprovalChange?: (suggestionId: string, approved: boolean) => void;
   pageStatus?: Record<number, { stage: string; stageLabel: string; errorMessage?: string }>;
 }
 
@@ -109,6 +110,7 @@ function PdfPageCanvas({
   drawMode = false,
   onSuggestionSelect,
   onManualRedactionCreated,
+  onApprovalChange,
   pageStatus,
 }: {
   pdfDocument: PDFDocumentProxy;
@@ -119,6 +121,7 @@ function PdfPageCanvas({
   drawMode?: boolean;
   onSuggestionSelect?: (suggestionId: string) => void;
   onManualRedactionCreated?: (pageIndex: number, rect: RedactionRect) => void;
+  onApprovalChange?: (suggestionId: string, approved: boolean) => void;
   pageStatus?: Record<number, { stage: string; stageLabel: string; errorMessage?: string }>;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -353,7 +356,8 @@ function PdfPageCanvas({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          // Will wire this to mutation in documents.tsx
+                          onApprovalChange?.(box.id, true);
+                          setHoveredBoxId(null);
                         }}
                         className="flex h-6 w-6 items-center justify-center rounded bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
                         title="Approve (A)"
@@ -365,7 +369,8 @@ function PdfPageCanvas({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          // Will wire this to mutation in documents.tsx
+                          onApprovalChange?.(box.id, false);
+                          setHoveredBoxId(null);
                         }}
                         className="flex h-6 w-6 items-center justify-center rounded bg-red-500 text-white hover:bg-red-600 transition-colors"
                         title="Reject (R)"
@@ -419,6 +424,7 @@ export function PdfDocumentViewer({
   selectedSuggestionId,
   onSuggestionSelect,
   onManualRedactionCreated,
+  onApprovalChange,
   pageStatus,
 }: PdfDocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -542,6 +548,7 @@ export function PdfDocumentViewer({
                 drawMode={drawMode}
                 onSuggestionSelect={onSuggestionSelect}
                 onManualRedactionCreated={onManualRedactionCreated}
+                onApprovalChange={onApprovalChange}
                 pageStatus={pageStatus}
               />
             );

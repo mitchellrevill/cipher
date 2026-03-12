@@ -729,6 +729,9 @@ export default function DocumentsRoute() {
             onManualRedactionCreated={(pageIndex, rect) =>
               manualRedactionMutation.mutate({ pageIndex, rect })
             }
+            onApprovalChange={(suggestionId, approved) =>
+              approvalMutation.mutate({ suggestionId, approved })
+            }
             pageStatus={Object.fromEntries(
               Object.entries(pageStatus).map(([num, status]) => [
                 parseInt(num, 10),

@@ -2,3 +2,4 @@ export { usePageProcessingStatus, type PageStage, type PageStatus } from "./useP
 export { useSuggestionStreamListener } from "./useSuggestionStreamListener";
 export { useRecentJobs } from "./useRecentJobs";
 export { useRedactionHotkeys } from "./useRedactionHotkeys";
+export { useFuzzySearch } from "./useFuzzySearch";

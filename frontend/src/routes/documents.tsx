@@ -37,6 +37,7 @@ import {
   PromptInputActions,
   PromptInputTextarea,
 } from "@/components/ui/prompt-input";
+import { usePageProcessingStatus, useSuggestionStreamListener } from "@/hooks";
 import { useRecentJobs } from "@/hooks/useRecentJobs";
 import { queryClient } from "@/lib/query-client";
 import {
@@ -168,6 +169,30 @@ export default function DocumentsRoute() {
   }, [jobQuery.data, selectedJobId, selectedRecentJob]);
 
   const activeJob = jobQuery.data;
+
+  // Initialize page processing status tracking
+  const {
+    pageStatus,
+    updatePageStatus,
+    getCurrentProcessingPage,
+    getCurrentStage,
+    getStageLabel,
+  } = usePageProcessingStatus(activeJob?.suggestions?.length ?? 0);
+
+  // Initialize suggestion streaming listener
+  const {
+    isConnected: isStreamConnected,
+  } = useSuggestionStreamListener(
+    selectedJobId,
+    (pageNum, stage) => {
+      updatePageStatus(pageNum, stage as any);
+    },
+    (suggestion) => {
+      // Suggestion received via SSE - log for now
+      console.log("New suggestion via stream:", suggestion);
+    }
+  );
+
   const sortedSuggestions = useMemo(() => sortSuggestions(activeJob?.suggestions ?? []), [activeJob?.suggestions]);
   const approvedCount = useMemo(() => sortedSuggestions.filter((s) => s.approved).length, [sortedSuggestions]);
   const localPdfUrl = selectedJobId ? getLocalPdfUrl(selectedJobId) : null;
@@ -676,6 +701,16 @@ export default function DocumentsRoute() {
             onManualRedactionCreated={(pageIndex, rect) =>
               manualRedactionMutation.mutate({ pageIndex, rect })
             }
+            pageStatus={Object.fromEntries(
+              Object.entries(pageStatus).map(([num, status]) => [
+                num,
+                {
+                  stage: status.stage,
+                  stageLabel: getStageLabel(status.stage),
+                  errorMessage: status.error_message,
+                },
+              ])
+            )}
           />
         </div>
       </div>
@@ -687,9 +722,22 @@ export default function DocumentsRoute() {
             Suggestions
           </span>
           {activeJob && (
-            <span className="text-xs text-muted-foreground">
-              {approvedCount}/{sortedSuggestions.length} approved
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {isStreamConnected && (
+                <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-amber-600 dark:bg-amber-400 animate-pulse" />
+                  Processing
+                </span>
+              )}
+              {getCurrentProcessingPage() !== null && (
+                <span className="text-xs text-muted-foreground">
+                  Page {getCurrentProcessingPage()! + 1}: {getStageLabel(getCurrentStage() as any)}...
+                </span>
+              )}
+              <span className="text-xs text-muted-foreground">
+                {approvedCount}/{sortedSuggestions.length} approved
+              </span>
+            </div>
           )}
         </div>
 

@@ -27,6 +27,7 @@ interface PdfDocumentViewerProps {
   selectedSuggestionId?: string | null;
   onSuggestionSelect?: (suggestionId: string) => void;
   onManualRedactionCreated?: (pageIndex: number, rect: RedactionRect) => void;
+  pageStatus?: Record<string, { stage: string; stageLabel: string; errorMessage?: string }>;
 }
 
 interface DraftRect {

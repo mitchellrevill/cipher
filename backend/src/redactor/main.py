@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redactor.config import get_settings
 from redactor.containers.app import AppContainer
-from redactor.routes import jobs, redactions, agent
+from redactor.routes import jobs, redactions, agent, workspaces
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,7 @@ async def lifespan(app: FastAPI):
         container.config.from_dict({
             'cosmos_endpoint': settings.cosmos_endpoint,
             'cosmos_key': settings.cosmos_key,
+            'cosmos_db_name': settings.cosmos_db_name,
             'azure_storage_account_url': settings.azure_storage_account_url,
             'azure_storage_account_key': settings.azure_storage_account_key,
             'azure_openai_endpoint': settings.azure_openai_endpoint,
@@ -92,3 +93,4 @@ app.add_middleware(
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(redactions.router, prefix="/api/jobs/{job_id}/redactions", tags=["redactions"])
 app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
+app.include_router(workspaces.router, prefix="/api/workspaces", tags=["workspaces"])

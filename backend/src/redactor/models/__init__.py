@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from enum import Enum
 from typing import Literal, Optional, List
 from datetime import datetime
+from redactor.models.workspace import Workspace, WorkspaceRule, WorkspaceExclusion
 
 # Existing models from original models.py
 
@@ -76,6 +77,9 @@ __all__ = [
     "ChatMessage",
     "ChatSession",
     "AgentSession",
+    "Workspace",
+    "WorkspaceRule",
+    "WorkspaceExclusion",
     "PageProcessingStage",
     "PageStatusEvent",
     "SuggestionFoundEvent",

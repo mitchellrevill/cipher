@@ -8,6 +8,7 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     job_id: str
     message: str
+    workspace_id: Optional[str] = None
     session_id: Optional[str] = None  # reserved for future multi-session DB persistence
     previous_response_id: Optional[str] = None
 
@@ -31,7 +32,10 @@ async def chat(
 
     # Create or get session
     if not request.session_id:
-        session = await agent_service.create_session(request.job_id)
+        if request.workspace_id is None:
+            session = await agent_service.create_session(request.job_id)
+        else:
+            session = await agent_service.create_session(request.job_id, workspace_id=request.workspace_id)
         session_id = session["id"]
     else:
         session = await agent_service.get_session(request.session_id)
@@ -43,11 +47,16 @@ async def chat(
     await agent_service.save_message(session_id, "user", request.message)
 
     # Get agent response
-    response = await agent_service.run_turn(
-        job_id=request.job_id,
-        message=request.message,
-        previous_response_id=request.previous_response_id
-    )
+    run_turn_kwargs = {
+        "job_id": request.job_id,
+        "message": request.message,
+        "previous_response_id": request.previous_response_id,
+    }
+    if request.workspace_id is not None:
+        run_turn_kwargs["workspace_id"] = request.workspace_id
+        run_turn_kwargs["session_id"] = session_id
+
+    response = await agent_service.run_turn(**run_turn_kwargs)
 
     # Save assistant message
     await agent_service.save_message(session_id, "assistant", response["text"])
@@ -55,5 +64,6 @@ async def chat(
     return {
         "session_id": session_id,
         "response": response["text"],
-        "response_id": response["response_id"]
+        "response_id": response["response_id"],
+        "directives": response.get("directives", []),
     }

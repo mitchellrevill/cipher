@@ -1,16 +1,12 @@
-"""
-Service layer dependency injection container.
+"""Service layer dependency injection container."""
 
-Manages business logic services with factory pattern (new instance per call).
-Services depend on infrastructure clients from ClientsContainer.
-"""
-
-from typing import Optional
 from dependency_injector import containers, providers
+from redactor.agent.orchestrator import RedactionOrchestrator
 from redactor.services.job_service import JobService
 from redactor.services.redaction_service import RedactionService
 from redactor.services.blob_service import BlobService
 from redactor.services.agent_service import AgentService
+from redactor.services.workspace_service import WorkspaceService
 
 
 # In-memory stub for Cosmos DB used as a local fallback when the real
@@ -40,6 +36,45 @@ class _InMemoryCosmosClient:
             return self._store[key]
         raise Exception('NotFound')
 
+    def upsert_item(self, body=None, **kwargs):
+        return self.create_item(body=body, **kwargs)
+
+    def delete_item(self, item=None, partition_key=None, **kwargs):
+        if item in self._store:
+            deleted = self._store[item]
+            del self._store[item]
+            return deleted
+        raise Exception('NotFound')
+
+    def query_items(self, query=None, parameters=None, **kwargs):
+        items = list(self._store.values())
+        params = {param['name']: param['value'] for param in (parameters or [])}
+        if '@workspace_id' in params:
+            items = [item for item in items if item.get('workspace_id') == params['@workspace_id']]
+        if '@user_id' in params:
+            items = [item for item in items if item.get('user_id') == params['@user_id']]
+        return items
+
+
+class _InMemoryDatabaseClient:
+    def __init__(self):
+        self._containers = {}
+
+    def get_container_client(self, name):
+        if name not in self._containers:
+            self._containers[name] = _InMemoryCosmosClient()
+        return self._containers[name]
+
+
+class _InMemoryCosmosAccount:
+    def __init__(self):
+        self._databases = {}
+
+    def get_database_client(self, name):
+        if name not in self._databases:
+            self._databases[name] = _InMemoryDatabaseClient()
+        return self._databases[name]
+
 
 def _safe_get_cosmos(c):
     """Attempt to get a real Cosmos client; fall back to in-memory stub on error."""
@@ -55,6 +90,17 @@ def _safe_get_cosmos(c):
         if '_inmemory_cosmos_instance' not in globals() or globals().get('_inmemory_cosmos_instance') is None:
             globals()['_inmemory_cosmos_instance'] = _InMemoryCosmosClient()
         return globals()['_inmemory_cosmos_instance']
+
+
+def _safe_get_cosmos_account(c):
+    """Attempt to get a real Cosmos account client; fall back to in-memory account."""
+    global _inmemory_cosmos_account
+    try:
+        return c.clients.cosmos_client()
+    except Exception:
+        if '_inmemory_cosmos_account' not in globals() or globals().get('_inmemory_cosmos_account') is None:
+            globals()['_inmemory_cosmos_account'] = _InMemoryCosmosAccount()
+        return globals()['_inmemory_cosmos_account']
 
 
 def _safe_get_blob(c):
@@ -84,10 +130,12 @@ class _CosmosClientWrapper:
         return self._fallback
 
     def _get_container(self):
-        """Lazily get the default container (database='redactor', container='jobs')."""
+        """Lazily get the default jobs container."""
         if self._container is None:
             try:
-                db_client = self._cosmos.get_database_client('redactor')
+                from redactor.config import get_settings
+
+                db_client = self._cosmos.get_database_client(get_settings().cosmos_db_name)
                 self._container = db_client.get_container_client('jobs')
             except Exception:
                 # Fall back to in-memory on any error (missing DB, missing container, etc.)
@@ -142,6 +190,21 @@ def _create_agent_service(oai_client, job_service):
     )
 
 
+def _create_workspace_service(cosmos_client):
+    """Factory function to create WorkspaceService with a Cosmos account client."""
+    return WorkspaceService(cosmos_client=cosmos_client)
+
+
+def _create_orchestrated_agent_service(oai_client, job_service, workspace_service):
+    """Factory function to create AgentService with workspace-aware orchestration."""
+    return AgentService(
+        oai_client=oai_client,
+        job_service=job_service,
+        workspace_service=workspace_service,
+        orchestrator=RedactionOrchestrator(oai_client=oai_client),
+    )
+
+
 class ServicesContainer(containers.DeclarativeContainer):
     """
     Business logic service container.
@@ -172,8 +235,14 @@ class ServicesContainer(containers.DeclarativeContainer):
         blob_client=providers.Callable(lambda c: c.clients.blob_client(), clients)
     )
 
+    workspace_service = providers.Factory(
+        _create_workspace_service,
+        cosmos_client=providers.Callable(_safe_get_cosmos_account, clients)
+    )
+
     agent_service = providers.Factory(
-        _create_agent_service,
+        _create_orchestrated_agent_service,
         oai_client=providers.Callable(lambda c: c.clients.oai_client(), clients),
-        job_service=job_service  # FIXED: Reuse container's job_service, not create new
+        job_service=job_service,
+        workspace_service=workspace_service,
     )

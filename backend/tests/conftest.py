@@ -18,6 +18,7 @@ from redactor.services.agent_service import AgentService
 from redactor.services.blob_service import BlobService
 from redactor.services.job_service import JobService
 from redactor.services.redaction_service import RedactionService
+from redactor.services.workspace_service import WorkspaceService
 
 
 # ============================================================================
@@ -86,12 +87,28 @@ def mock_agent_service(mock_job_service):
     return service
 
 
+@pytest.fixture
+def mock_workspace_service():
+    """Create a mock WorkspaceService for integration tests."""
+    service = MagicMock(spec=WorkspaceService)
+    service.create_workspace = AsyncMock()
+    service.get_workspace = AsyncMock()
+    service.get_workspace_state = AsyncMock()
+    service.list_workspaces = AsyncMock(return_value=[])
+    service.add_document = AsyncMock()
+    service.remove_document = AsyncMock()
+    service.create_rule = AsyncMock()
+    service.exclude_document = AsyncMock()
+    service.remove_exclusion = AsyncMock()
+    return service
+
+
 # ============================================================================
 # Container Fixture
 # ============================================================================
 
 @pytest.fixture
-def mock_container(mock_job_service, mock_redaction_service, mock_agent_service, mock_blob_client):
+def mock_container(mock_job_service, mock_redaction_service, mock_agent_service, mock_workspace_service, mock_blob_client):
     """
     Create a mock AppContainer with all services properly configured.
 
@@ -100,19 +117,27 @@ def mock_container(mock_job_service, mock_redaction_service, mock_agent_service,
     """
     container = MagicMock()  # Don't use spec to allow arbitrary attribute assignment
 
+    job_factory = MagicMock(return_value=mock_job_service)
+    redaction_factory = MagicMock(return_value=mock_redaction_service)
+    agent_factory = MagicMock(return_value=mock_agent_service)
+    workspace_factory = MagicMock(return_value=mock_workspace_service)
+
     # Configure service factory methods
-    container.job_service.return_value = mock_job_service
-    container.redaction_service.return_value = mock_redaction_service
-    container.agent_service.return_value = mock_agent_service
+    container.job_service = job_factory
+    container.redaction_service = redaction_factory
+    container.agent_service = agent_factory
+    container.workspace_service = workspace_factory
+    container.workspace_service.return_value = mock_workspace_service
 
     # Configure blob client
     container.blob_client.return_value = mock_blob_client
 
     # Configure service properties (for direct access)
     container.services = MagicMock()
-    container.services.job_service = MagicMock(return_value=mock_job_service)
-    container.services.redaction_service = MagicMock(return_value=mock_redaction_service)
-    container.services.agent_service = MagicMock(return_value=mock_agent_service)
+    container.services.job_service = job_factory
+    container.services.redaction_service = redaction_factory
+    container.services.agent_service = agent_factory
+    container.services.workspace_service = workspace_factory
 
     # Configure clients
     container.clients = MagicMock()
@@ -133,7 +158,7 @@ def test_app(mock_container):
     This is the primary fixture for route testing. It includes all routers
     and uses the mock_container for dependency injection.
     """
-    from redactor.routes import jobs, redactions, agent
+    from redactor.routes import jobs, redactions, agent, workspaces
     from fastapi.middleware.cors import CORSMiddleware
 
     @asynccontextmanager
@@ -159,6 +184,7 @@ def test_app(mock_container):
     app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
     app.include_router(redactions.router, prefix="/api/jobs/{job_id}/redactions", tags=["redactions"])
     app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
+    app.include_router(workspaces.router, prefix="/api/workspaces", tags=["workspaces"])
 
     return app
 

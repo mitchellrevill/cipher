@@ -7,6 +7,7 @@ from redactor.services.job_service import JobService
 from redactor.services.redaction_service import RedactionService
 from redactor.services.blob_service import BlobService
 from redactor.services.agent_service import AgentService
+from redactor.services.workspace_service import WorkspaceService
 
 @pytest.fixture
 def test_config():
@@ -116,4 +117,29 @@ def test_agent_service_receives_job_service(test_config):
     agent = services_container.agent_service()
     assert isinstance(agent, AgentService)
     assert isinstance(agent.job_service, JobService)
+    assert isinstance(agent.workspace_service, WorkspaceService)
     assert agent.oai_client is mock_oai
+
+
+def test_workspace_service_factory(test_config):
+    """Verify WorkspaceService factory creates new instances."""
+    clients_container = ClientsContainer()
+    clients_container.config.from_dict(test_config)
+    mock_cosmos = AsyncMock()
+    clients_container.clients.cosmos_client.override(
+        providers.Singleton(lambda: mock_cosmos)
+    )
+    clients_container.clients.blob_client.override(
+        providers.Singleton(lambda: AsyncMock())
+    )
+    clients_container.clients.oai_client.override(
+        providers.Singleton(lambda: AsyncMock())
+    )
+
+    services_container = ServicesContainer()
+    services_container.clients.override(clients_container)
+
+    workspace1 = services_container.workspace_service()
+    workspace2 = services_container.workspace_service()
+    assert workspace1 is not workspace2
+    assert isinstance(workspace1, WorkspaceService)

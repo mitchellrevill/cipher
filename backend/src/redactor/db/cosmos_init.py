@@ -44,6 +44,36 @@ COLLECTIONS = {
             {"path": "/job_id"},
             {"path": "/created_at"},
         ]
+    },
+    "workspaces": {
+        "partition_key": "/user_id",
+        "ttl": None,
+        "unique_keys": [{"paths": ["/id"]}],
+        "indexes": [
+            {"path": "/user_id"},
+            {"path": "/name"},
+            {"path": "/created_at"},
+        ]
+    },
+    "workspace_rules": {
+        "partition_key": "/workspace_id",
+        "ttl": None,
+        "unique_keys": [{"paths": ["/id"]}],
+        "indexes": [
+            {"path": "/workspace_id"},
+            {"path": "/category"},
+            {"path": "/created_at"},
+        ]
+    },
+    "workspace_exclusions": {
+        "partition_key": "/workspace_id",
+        "ttl": None,
+        "unique_keys": [{"paths": ["/id"]}],
+        "indexes": [
+            {"path": "/workspace_id"},
+            {"path": "/document_id"},
+            {"path": "/created_at"},
+        ]
     }
 }
 

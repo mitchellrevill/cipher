@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
 from redactor.services.agent_service import AgentService
 from redactor.services.job_service import JobService
+from redactor.services.workspace_service import WorkspaceService
 
 
 @pytest.fixture
@@ -20,9 +21,19 @@ def mock_job_service():
 
 
 @pytest.fixture
-def agent_service(mock_oai_client, mock_job_service):
+def mock_workspace_service():
+    """Create a mock WorkspaceService."""
+    return AsyncMock(spec=WorkspaceService)
+
+
+@pytest.fixture
+def agent_service(mock_oai_client, mock_job_service, mock_workspace_service):
     """Create an AgentService instance with mocked dependencies."""
-    return AgentService(oai_client=mock_oai_client, job_service=mock_job_service)
+    return AgentService(
+        oai_client=mock_oai_client,
+        job_service=mock_job_service,
+        workspace_service=mock_workspace_service,
+    )
 
 
 @pytest.mark.asyncio
@@ -126,3 +137,35 @@ async def test_run_turn_error_handling(agent_service, mock_oai_client, mock_job_
     assert "text" in result
     assert "Error processing request" in result["text"]
     assert result["response_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_run_turn_uses_orchestrator(agent_service, mock_job_service, mock_workspace_service):
+    """Verify run_turn delegates to orchestrator when configured."""
+    mock_job_service.get_job.return_value = MagicMock(filename="test.pdf", job_id="job-1")
+    mock_workspace_service.get_workspace_state.return_value = {
+        "id": "ws-1",
+        "name": "Workspace",
+        "documents": [],
+        "rules": [],
+        "exclusions": [],
+    }
+    orchestrator = AsyncMock()
+    orchestrator.run_turn = AsyncMock(return_value={
+        "text": "Workspace-aware response",
+        "response_id": "resp-1",
+        "tool_calls": [],
+        "directives": [],
+    })
+    agent_service.orchestrator = orchestrator
+    session = await agent_service.create_session("job-1", workspace_id="ws-1")
+
+    result = await agent_service.run_turn(
+        job_id="job-1",
+        message="Apply the workspace rules",
+        workspace_id="ws-1",
+        session_id=session["id"],
+    )
+
+    assert result["text"] == "Workspace-aware response"
+    orchestrator.run_turn.assert_called_once()

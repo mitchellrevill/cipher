@@ -3,6 +3,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from redactor.pipeline.orchestrator import run_pipeline
 from redactor.config import Settings
+from redactor.agent.orchestrator import RedactionOrchestrator
 
 @pytest.fixture
 def test_settings():
@@ -86,3 +87,14 @@ async def test_run_pipeline_returns_empty_when_no_findings(test_settings, mock_a
 
         suggestions = await run_pipeline(b"pdf-bytes", "", test_settings)
         assert suggestions == []
+
+
+@pytest.mark.asyncio
+async def test_redaction_orchestrator_initialization():
+    mock_oai_client = AsyncMock()
+
+    orchestrator = RedactionOrchestrator(oai_client=mock_oai_client)
+
+    assert orchestrator.oai_client is not None
+    assert len(orchestrator.tools) > 0
+    assert orchestrator.system_prompt is not None

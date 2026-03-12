@@ -1,8 +1,8 @@
-"""
-Cosmos DB initialization and migration script.
+"""Cosmos DB initialization script for persistent job metadata.
 
-Creates collections, partition keys, and indexes for the application.
-Run once during deployment or during local development setup.
+The active backend architecture persists only job metadata in Cosmos DB.
+Suggestions are stored in Blob Storage, and the old multi-container Cosmos
+layout has been retired.
 """
 
 import asyncio
@@ -24,55 +24,6 @@ COLLECTIONS = {
             {"path": "/status"},
             {"path": "/created_at"},
             {"path": "/user_id"},
-        ]
-    },
-    "suggestions": {
-        "partition_key": "/job_id",
-        "ttl": None,
-        "unique_keys": [{"paths": ["/id"]}],
-        "indexes": [
-            {"path": "/job_id"},
-            {"path": "/approved"},
-            {"path": "/source"},
-        ]
-    },
-    "chat_sessions": {
-        "partition_key": "/job_id",
-        "ttl": None,
-        "unique_keys": [{"paths": ["/id"]}],
-        "indexes": [
-            {"path": "/job_id"},
-            {"path": "/created_at"},
-        ]
-    },
-    "workspaces": {
-        "partition_key": "/user_id",
-        "ttl": None,
-        "unique_keys": [{"paths": ["/id"]}],
-        "indexes": [
-            {"path": "/user_id"},
-            {"path": "/name"},
-            {"path": "/created_at"},
-        ]
-    },
-    "workspace_rules": {
-        "partition_key": "/workspace_id",
-        "ttl": None,
-        "unique_keys": [{"paths": ["/id"]}],
-        "indexes": [
-            {"path": "/workspace_id"},
-            {"path": "/category"},
-            {"path": "/created_at"},
-        ]
-    },
-    "workspace_exclusions": {
-        "partition_key": "/workspace_id",
-        "ttl": None,
-        "unique_keys": [{"paths": ["/id"]}],
-        "indexes": [
-            {"path": "/workspace_id"},
-            {"path": "/document_id"},
-            {"path": "/created_at"},
         ]
     }
 }
@@ -159,7 +110,7 @@ async def setup_cosmos_db(
     key: str = None
 ):
     """
-    Complete Cosmos DB setup: database + collections + indexes.
+    Complete Cosmos DB setup for persistent job metadata.
 
     Args:
         endpoint: Cosmos DB endpoint

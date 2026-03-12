@@ -74,8 +74,8 @@ def test_app_redactions_service(seeded_job_service, mock_redaction_service, mock
 
     # Configure service and client properties (for direct access)
     container.services = MagicMock()
-    container.services.job_service = seeded_job_service
-    container.services.redaction_service = mock_redaction_service
+    container.services.job_service = MagicMock(return_value=seeded_job_service)
+    container.services.redaction_service = MagicMock(return_value=mock_redaction_service)
 
     container.clients = MagicMock()
     container.clients.blob_client = mock_blob_client
@@ -97,7 +97,9 @@ def test_app_redactions_service(seeded_job_service, mock_redaction_service, mock
         allow_headers=["*"],
     )
     app.include_router(redactions.router, prefix="/api/jobs/{job_id}/redactions", tags=["redactions"])
-    return app
+
+    with patch("redactor.routes.redactions._get_blob", return_value=mock_blob_client):
+        yield app
 
 
 @pytest.mark.asyncio
@@ -238,7 +240,7 @@ async def test_apply_redactions_job_not_complete(test_app_redactions_service, mo
     # Create a new mock for this specific test
     mock_job_service_pending = AsyncMock(spec=JobService)
     mock_job_service_pending.get_job = AsyncMock(return_value=pending_job)
-    test_app_redactions_service.container.job_service.return_value = mock_job_service_pending
+    test_app_redactions_service.container.services.job_service.return_value = mock_job_service_pending
 
     async with AsyncClient(transport=ASGITransport(app=test_app_redactions_service), base_url="http://test") as client:
         response = await client.post("/api/jobs/job-pending/redactions/apply")
@@ -290,7 +292,7 @@ async def test_apply_redactions_no_approved_suggestions(test_app_redactions_serv
     )
 
     # Setup service to return unapproved job
-    test_app_redactions_service.container.job_service.return_value.get_job = AsyncMock(
+    test_app_redactions_service.container.services.job_service.return_value.get_job = AsyncMock(
         return_value=unapproved_job
     )
 
@@ -333,7 +335,7 @@ async def test_apply_redactions_multiple_approved_suggestions(
     )
 
     # Setup service to return job with multiple suggestions
-    test_app_redactions_service.container.job_service.return_value.get_job = AsyncMock(
+    test_app_redactions_service.container.services.job_service.return_value.get_job = AsyncMock(
         return_value=job_with_multiple
     )
 

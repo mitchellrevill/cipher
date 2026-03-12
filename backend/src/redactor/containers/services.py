@@ -4,7 +4,6 @@ from dependency_injector import containers, providers
 from redactor.agent.orchestrator import RedactionOrchestrator
 from redactor.services.job_service import JobService
 from redactor.services.redaction_service import RedactionService
-from redactor.services.blob_service import BlobService
 from redactor.services.agent_service import AgentService
 from redactor.services.rule_engine import RuleEngine
 from redactor.services.workspace_service import WorkspaceService
@@ -178,11 +177,6 @@ def _create_redaction_service(cosmos_client, blob_client):
     return RedactionService(cosmos_client=cosmos_client, blob_client=blob_client)
 
 
-def _create_blob_service(blob_client):
-    """Factory function to create BlobService with blob client."""
-    return BlobService(blob_client=blob_client)
-
-
 def _create_agent_service(oai_client, job_service):
     """Factory function to create AgentService with oai client and job service."""
     return AgentService(
@@ -240,11 +234,6 @@ class ServicesContainer(containers.DeclarativeContainer):
         _create_redaction_service,
         cosmos_client=providers.Callable(_safe_get_cosmos, clients),
         blob_client=providers.Callable(_safe_get_blob, clients)
-    )
-
-    blob_service = providers.Factory(
-        _create_blob_service,
-        blob_client=providers.Callable(lambda c: c.clients.blob_client(), clients)
     )
 
     workspace_service = providers.Factory(

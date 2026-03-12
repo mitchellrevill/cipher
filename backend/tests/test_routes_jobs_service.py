@@ -96,15 +96,17 @@ async def test_get_job_returns_404_when_not_found(mock_job_service, mock_blob_cl
 async def test_stream_endpoint_polls_service(mock_job_service, mock_blob_client, test_app):
     """Verify GET /jobs/{id}/stream calls JobService repeatedly."""
     now = datetime.now()
+    job_id = "123e4567-e89b-12d3-a456-426614174000"
     job = Job(
-        job_id="job-stream",
+        job_id=job_id,
         status=JobStatus.COMPLETE,
         created_at=now
     )
     mock_job_service.get_job.return_value = job
 
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
-        response = await client.get("/api/jobs/job-stream/stream")
+        response = await client.get(f"/api/jobs/{job_id}/stream")
+        await response.aread()
 
     assert response.status_code == 200
     # Verify service was called at least once

@@ -5,7 +5,6 @@ from redactor.containers.services import ServicesContainer
 from redactor.containers.clients import ClientsContainer
 from redactor.services.job_service import JobService
 from redactor.services.redaction_service import RedactionService
-from redactor.services.blob_service import BlobService
 from redactor.services.agent_service import AgentService
 from redactor.services.workspace_service import WorkspaceService
 
@@ -72,29 +71,6 @@ def test_redaction_service_factory(test_config):
     redaction2 = services_container.redaction_service()
     assert redaction1 is not redaction2
     assert isinstance(redaction1, RedactionService)
-
-def test_blob_service_factory(test_config):
-    """Verify BlobService factory creates new instances."""
-    clients_container = ClientsContainer()
-    clients_container.config.from_dict(test_config)
-    clients_container.clients.cosmos_client.override(
-        providers.Singleton(lambda: AsyncMock())
-    )
-    mock_blob = AsyncMock()
-    clients_container.clients.blob_client.override(
-        providers.Singleton(lambda: mock_blob)
-    )
-    clients_container.clients.oai_client.override(
-        providers.Singleton(lambda: AsyncMock())
-    )
-
-    services_container = ServicesContainer()
-    services_container.clients.override(clients_container)
-
-    blob1 = services_container.blob_service()
-    blob2 = services_container.blob_service()
-    assert blob1 is not blob2
-    assert isinstance(blob1, BlobService)
 
 def test_agent_service_receives_job_service(test_config):
     """Verify AgentService receives JobService from container."""

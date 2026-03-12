@@ -2,11 +2,14 @@
 Redaction suggestion management service.
 
 Manages CRUD operations for suggestions and approval state.
-Integrates with Cosmos DB for suggestion persistence.
+
+Suggestions are persisted in blob storage as a per-job JSON document.
+The legacy Cosmos-backed suggestion methods were removed once suggestion
+storage moved fully to Azure Blob Storage.
 """
 
 from collections.abc import Iterable
-from typing import Optional, List
+from typing import Optional
 from datetime import datetime
 from redactor.models import Suggestion
 
@@ -19,59 +22,14 @@ class RedactionService:
     Suggestions are PII/sensitive data identified for redaction.
     """
 
-    CONTAINER_NAME = "suggestions"
-    PARTITION_KEY = "job_id"
-
     def __init__(self, cosmos_client, blob_client=None):
-        """Initialize RedactionService with Cosmos DB and optional Blob Storage clients."""
+        """Initialize RedactionService.
+
+        The `cosmos_client` parameter is kept for constructor compatibility with
+        existing container wiring, but suggestion persistence is blob-backed.
+        """
         self.cosmos_client = cosmos_client
         self.blob_client = blob_client
-        self.container = None
-
-    async def _get_container(self):
-        """Lazy-load container reference."""
-        if self.container is None:
-            # Will be set up when DB is initialized (Task 9)
-            pass
-        return self.container
-
-    async def save_suggestions(self, job_id: str, suggestions: List[dict]) -> List[dict]:
-        """
-        Save multiple suggestions for a job.
-
-        Args:
-            job_id: Job identifier
-            suggestions: List of suggestion dicts
-
-        Returns:
-            List of saved suggestions
-        """
-        saved = []
-        now = datetime.utcnow()
-        for sugg in suggestions:
-            sugg["job_id"] = job_id
-            sugg["created_at"] = sugg.get("created_at", now.isoformat())
-            sugg["updated_at"] = now.isoformat()
-            result = self.cosmos_client.create_item(body=sugg)
-            saved.append(result)
-        return saved
-
-    async def get_suggestions(self, job_id: str) -> List[Suggestion]:
-        """
-        Get all suggestions for a job.
-
-        Args:
-            job_id: Job identifier
-
-        Returns:
-            List of suggestions
-        """
-        try:
-            query = f"SELECT * FROM c WHERE c.job_id = '{job_id}'"
-            results = list(self.cosmos_client.query_items(query=query))
-            return [self._doc_to_suggestion(doc) for doc in results]
-        except Exception:
-            return []
 
     async def toggle_approval(self, job_id: str, suggestion_id: str, approved: bool):
         """
@@ -164,40 +122,11 @@ class RedactionService:
         await self.blob_client.save_suggestions(job_id, suggestions)
 
     async def delete_suggestion(self, job_id: str, suggestion_id: str):
-        """
-        Delete a suggestion.
+        """Delete a suggestion from the blob-backed suggestion set."""
+        if not self.blob_client:
+            raise Exception("Blob client not available for suggestion updates")
 
-        Args:
-            job_id: Job identifier
-            suggestion_id: Suggestion identifier
-        """
-        self.cosmos_client.delete_item(item=suggestion_id, partition_key=job_id)
-
-    def _doc_to_suggestion(self, doc: dict) -> Suggestion:
-        """Convert Cosmos DB document to Suggestion model."""
-        created_at = doc.get("created_at")
-        if isinstance(created_at, str):
-            created_at = datetime.fromisoformat(created_at)
-
-        updated_at = doc.get("updated_at")
-        if isinstance(updated_at, str):
-            updated_at = datetime.fromisoformat(updated_at)
-
-        # Convert rect dicts to RedactionRect objects
-        from redactor.models import RedactionRect
-        rects = [RedactionRect(**r) for r in doc.get("rects", [])]
-
-        return Suggestion(
-            id=doc.get("id"),
-            job_id=doc.get("job_id"),
-            text=doc.get("text"),
-            category=doc.get("category"),
-            reasoning=doc.get("reasoning"),
-            context=doc.get("context"),
-            page_num=doc.get("page_num"),
-            rects=rects,
-            approved=doc.get("approved", False),
-            source=doc.get("source", "ai"),
-            created_at=created_at,
-            updated_at=updated_at
-        )
+        suggestions = await self.blob_client.load_suggestions(job_id)
+        filtered = [suggestion for suggestion in suggestions if suggestion.id != suggestion_id]
+        if len(filtered) != len(suggestions):
+            await self.blob_client.save_suggestions(job_id, filtered)

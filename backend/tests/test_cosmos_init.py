@@ -69,5 +69,5 @@ async def test_setup_cosmos_db():
             # Verify database initialized
             mock_init_db.assert_called_once()
 
-            # Verify all collections initialized (3 collections)
-            assert mock_init_coll.call_count == 3
+            # Verify all configured collections initialized
+            assert mock_init_coll.call_count == len(COLLECTIONS)

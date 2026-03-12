@@ -10,12 +10,12 @@ from datetime import datetime
 from fastapi import FastAPI
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import patch
 
 from redactor.containers.app import AppContainer
 from redactor.config import get_settings
 from redactor.models import Job, JobStatus, Suggestion, RedactionRect
 from redactor.services.agent_service import AgentService
-from redactor.services.blob_service import BlobService
 from redactor.services.job_service import JobService
 from redactor.services.redaction_service import RedactionService
 from redactor.services.workspace_service import WorkspaceService
@@ -67,11 +67,10 @@ def mock_job_service():
 def mock_redaction_service():
     """Create a mock RedactionService for integration tests."""
     service = AsyncMock(spec=RedactionService)
-    service.get_suggestions = AsyncMock(return_value=[])
-    service.save_suggestions = AsyncMock(return_value=[])
     service.toggle_approval = AsyncMock(return_value=None)
     service.bulk_update_approvals = AsyncMock(return_value=0)
     service.add_manual_suggestion = AsyncMock(return_value=None)
+    service.delete_suggestion = AsyncMock(return_value=None)
     return service
 
 
@@ -151,7 +150,7 @@ def mock_container(mock_job_service, mock_redaction_service, mock_agent_service,
 # ============================================================================
 
 @pytest.fixture
-def test_app(mock_container):
+def test_app(mock_container, mock_blob_client):
     """
     Create a test FastAPI application with all routes and mocked dependencies.
 
@@ -186,11 +185,15 @@ def test_app(mock_container):
     app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
     app.include_router(workspaces.router, prefix="/api/workspaces", tags=["workspaces"])
 
-    return app
+    with (
+        patch("redactor.routes.jobs._get_blob", return_value=mock_blob_client),
+        patch("redactor.routes.redactions._get_blob", return_value=mock_blob_client),
+    ):
+        yield app
 
 
 @pytest.fixture
-def test_app_jobs_only(mock_container):
+def test_app_jobs_only(mock_container, mock_blob_client):
     """
     Create a test FastAPI application with only the jobs router.
 
@@ -217,7 +220,9 @@ def test_app_jobs_only(mock_container):
     )
 
     app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
-    return app
+
+    with patch("redactor.routes.jobs._get_blob", return_value=mock_blob_client):
+        yield app
 
 
 @pytest.fixture

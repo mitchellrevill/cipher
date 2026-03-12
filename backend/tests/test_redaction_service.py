@@ -14,7 +14,7 @@ def mock_cosmos_client():
 
 @pytest.fixture
 def redaction_service(mock_cosmos_client):
-    """Create a RedactionService instance with mocked Cosmos client."""
+    """Create a RedactionService instance without blob storage."""
     return RedactionService(cosmos_client=mock_cosmos_client)
 
 
@@ -34,72 +34,10 @@ def redaction_service_with_blob(mock_cosmos_client, mock_blob_client):
 
 
 @pytest.mark.asyncio
-async def test_save_suggestions(redaction_service, mock_cosmos_client):
-    """Verify saving suggestions to Cosmos DB."""
-    now = datetime.utcnow()
-    suggestions = [
-        {
-            "id": "sugg-1",
-            "text": "John Smith",
-            "category": "Person",
-            "reasoning": "PII",
-            "context": "found in paragraph 2",
-            "page_num": 0,
-            "rects": [],
-            "approved": False,
-            "source": "ai",
-            "created_at": now.isoformat()
-        }
-    ]
-
-    mock_cosmos_client.create_item.return_value = {
-        "id": "sugg-1",
-        "job_id": "job-1",
-        "text": "John Smith",
-        "category": "Person",
-        "reasoning": "PII",
-        "context": "found in paragraph 2",
-        "page_num": 0,
-        "rects": [],
-        "approved": False,
-        "source": "ai",
-        "created_at": now.isoformat(),
-        "updated_at": now.isoformat()
-    }
-
-    result = await redaction_service.save_suggestions(job_id="job-1", suggestions=suggestions)
-
-    assert result is not None
-    assert len(result) > 0
-    mock_cosmos_client.create_item.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_get_suggestions(redaction_service, mock_cosmos_client):
-    """Verify getting suggestions for a job."""
-    now = datetime.utcnow()
-    mock_cosmos_client.query_items.return_value = [
-        {
-            "id": "sugg-1",
-            "job_id": "job-1",
-            "text": "John Smith",
-            "category": "Person",
-            "reasoning": "PII",
-            "context": "found in paragraph 2",
-            "page_num": 0,
-            "rects": [],
-            "approved": False,
-            "source": "ai",
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat()
-        }
-    ]
-
-    suggestions = await redaction_service.get_suggestions(job_id="job-1")
-
-    assert len(suggestions) > 0
-    assert suggestions[0].job_id == "job-1"
-    assert suggestions[0].text == "John Smith"
+async def test_toggle_approval_requires_blob_client(redaction_service):
+    """Approval updates require blob-backed suggestion persistence."""
+    with pytest.raises(Exception, match="Blob client not available"):
+        await redaction_service.toggle_approval(job_id="job-1", suggestion_id="sugg-1", approved=True)
 
 
 @pytest.mark.asyncio
@@ -195,28 +133,53 @@ async def test_add_manual_suggestion(redaction_service_with_blob, mock_blob_clie
 
 
 @pytest.mark.asyncio
-async def test_delete_suggestion(redaction_service, mock_cosmos_client):
-    """Verify deleting a suggestion."""
-    await redaction_service.delete_suggestion(job_id="job-1", suggestion_id="sugg-1")
+async def test_delete_suggestion(redaction_service_with_blob, mock_blob_client):
+    """Verify deleting a suggestion from blob-backed suggestion storage."""
+    suggestion = Suggestion(
+        id="sugg-1",
+        job_id="job-1",
+        text="John Smith",
+        category="Person",
+        reasoning="PII",
+        context="found in paragraph 2",
+        page_num=0,
+        rects=[],
+        approved=False,
+        source="ai",
+        created_at=datetime.utcnow(),
+    )
+    mock_blob_client.load_suggestions.return_value = [suggestion]
 
-    mock_cosmos_client.delete_item.assert_called_once()
+    await redaction_service_with_blob.delete_suggestion(job_id="job-1", suggestion_id="sugg-1")
+
+    mock_blob_client.save_suggestions.assert_awaited_once_with("job-1", [])
 
 
 @pytest.mark.asyncio
-async def test_get_suggestions_empty(redaction_service, mock_cosmos_client):
-    """Verify getting suggestions when none exist."""
-    mock_cosmos_client.query_items.return_value = []
-
-    suggestions = await redaction_service.get_suggestions(job_id="job-nonexistent")
-
-    assert len(suggestions) == 0
+async def test_delete_suggestion_requires_blob_client(redaction_service):
+    """Deleting suggestions requires blob-backed suggestion persistence."""
+    with pytest.raises(Exception, match="Blob client not available"):
+        await redaction_service.delete_suggestion(job_id="job-1", suggestion_id="sugg-1")
 
 
 @pytest.mark.asyncio
-async def test_get_suggestions_exception_handling(redaction_service, mock_cosmos_client):
-    """Verify exception handling when querying suggestions."""
-    mock_cosmos_client.query_items.side_effect = Exception("Query error")
+async def test_delete_suggestion_is_noop_when_id_missing(redaction_service_with_blob, mock_blob_client):
+    """Deleting a missing suggestion should not rewrite storage."""
+    suggestion = Suggestion(
+        id="sugg-1",
+        job_id="job-1",
+        text="John Smith",
+        category="Person",
+        reasoning="PII",
+        context="found in paragraph 2",
+        page_num=0,
+        rects=[],
+        approved=False,
+        source="ai",
+        created_at=datetime.utcnow(),
+    )
+    mock_blob_client.load_suggestions.return_value = [suggestion]
 
-    suggestions = await redaction_service.get_suggestions(job_id="job-1")
+    await redaction_service_with_blob.delete_suggestion(job_id="job-1", suggestion_id="missing")
 
-    assert len(suggestions) == 0
+    mock_blob_client.save_suggestions.assert_not_awaited()

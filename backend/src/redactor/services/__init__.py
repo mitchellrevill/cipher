@@ -2,7 +2,6 @@
 
 __all__ = [
 	"AgentService",
-	"BlobService",
 	"JobService",
 	"RedactionService",
 	"RuleEngine",

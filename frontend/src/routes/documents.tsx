@@ -24,6 +24,7 @@ import {
   type Suggestion,
 } from "@/api/services";
 import { PdfDocumentViewer } from "@/components/pdf/pdf-document-viewer";
+import { SearchToolbar } from "@/components/search/SearchToolbar";
 import {
   Badge,
   Button,
@@ -39,6 +40,8 @@ import {
 } from "@/components/ui/prompt-input";
 import { usePageProcessingStatus, useSuggestionStreamListener, useRedactionHotkeys } from "@/hooks";
 import { useRecentJobs } from "@/hooks/useRecentJobs";
+import { useFuzzySearch } from "@/hooks/useFuzzySearch";
+import type { TextMatch } from "@/types/search";
 import { queryClient } from "@/lib/query-client";
 import {
   getLocalPdfUrl,
@@ -100,6 +103,11 @@ export default function DocumentsRoute() {
   );
   const [viewerMode, setViewerMode] = useState<"original" | "redacted">("original");
   const [drawMode, setDrawMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const { matches: searchMatches, totalMatches, isSearching: isSearching_fuzzy, error: searchError } = useFuzzySearch(
+    documentHandle,
+    searchQuery
+  );
   const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [chatByJob, setChatByJob] = useState<Record<string, ConversationState>>({});
@@ -668,13 +676,24 @@ export default function DocumentsRoute() {
             {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1 flex flex-col justify-center">
+            <div className="flex items-center gap-2 mb-2">
               <span className="truncate font-medium text-sm text-foreground">
                 {selectedRecentJob?.filename ?? activeJob?.filename ?? "Document"}
               </span>
               {selectedRecentJob && <StatusBadge status={selectedRecentJob.status} />}
               {jobQuery.isFetching && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+            </div>
+            {/* Search toolbar */}
+            <div className="min-w-0">
+              <SearchToolbar
+                value={searchQuery}
+                onChange={setSearchQuery}
+                onClear={() => setSearchQuery("")}
+                matchCount={totalMatches}
+                isSearching={isSearching_fuzzy}
+                error={searchError}
+              />
             </div>
           </div>
 
@@ -766,6 +785,7 @@ export default function DocumentsRoute() {
           <PdfDocumentViewer
             source={viewerSource}
             suggestions={sortedSuggestions}
+            searchMatches={searchMatches}
             isLoading={jobQuery.isLoading}
             drawMode={drawMode && canDraw}
             selectedSuggestionId={selectedSuggestionId}
@@ -773,6 +793,16 @@ export default function DocumentsRoute() {
             onManualRedactionCreated={(pageIndex, rect) =>
               manualRedactionMutation.mutate({ pageIndex, rect })
             }
+            onSearchMatchRedacted={(match: TextMatch) => {
+              // When user clicks a search match, create a manual redaction
+              const primaryRect = match.rects[0];
+              if (primaryRect) {
+                manualRedactionMutation.mutate({
+                  pageIndex: match.pageNum,
+                  rect: primaryRect,
+                });
+              }
+            }}
             onApprovalChange={(suggestionId, approved) =>
               approvalMutation.mutate({ suggestionId, approved })
             }

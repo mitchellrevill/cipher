@@ -37,7 +37,7 @@ import {
   PromptInputActions,
   PromptInputTextarea,
 } from "@/components/ui/prompt-input";
-import { usePageProcessingStatus, useSuggestionStreamListener } from "@/hooks";
+import { usePageProcessingStatus, useSuggestionStreamListener, useRedactionHotkeys } from "@/hooks";
 import { useRecentJobs } from "@/hooks/useRecentJobs";
 import { queryClient } from "@/lib/query-client";
 import {
@@ -235,6 +235,16 @@ export default function DocumentsRoute() {
   const canDraw = viewerMode === "original" && !!localPdfUrl && !!selectedJobId;
   const conversation = selectedJobId ? chatByJob[selectedJobId] ?? EMPTY_CONVERSATION : EMPTY_CONVERSATION;
   const isReviewMode = !!selectedJobId;
+
+  // Initialize hotkeys for review mode
+  useRedactionHotkeys({
+    selectedSuggestionId,
+    suggestions: sortedSuggestions,
+    onSuggestionSelect: setSelectedSuggestionId,
+    onApprovalChange: (suggestionId, approved) =>
+      approvalMutation.mutate({ suggestionId, approved }),
+    onApproveAll: () => void approveAllMutation.mutateAsync(),
+  });
 
   async function loadRedactedPreview(jobId: string): Promise<string> {
     const blob = await redactionJobService.downloadRedactedPdf(jobId);

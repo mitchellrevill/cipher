@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 
 export type PageStage =
   | "pending"
@@ -8,7 +8,7 @@ export type PageStage =
   | "complete"
   | "error";
 
-interface PageStatus {
+export interface PageStatus {
   stage: PageStage;
   error_message?: string;
 }
@@ -32,7 +32,7 @@ export function usePageProcessingStatus(totalPages: number) {
     []
   );
 
-  const getStageLabel = (stage: PageStage): string => {
+  const getStageLabel = useCallback((stage: PageStage): string => {
     const labels: Record<PageStage, string> = {
       pending: "Waiting",
       analyzing_layout: "Analyzing layout",
@@ -42,7 +42,7 @@ export function usePageProcessingStatus(totalPages: number) {
       error: "Error",
     };
     return labels[stage] || stage;
-  };
+  }, []);
 
   const getCompletedPageCount = useCallback((): number => {
     return Object.values(pageStatus).filter((s) => s.stage === "complete").length;
@@ -57,9 +57,12 @@ export function usePageProcessingStatus(totalPages: number) {
   }, [pageStatus]);
 
   const getCurrentStage = useCallback((): PageStage | null => {
-    const pageNum = getCurrentProcessingPage();
-    return pageNum !== null ? pageStatus[pageNum]?.stage || null : null;
-  }, [pageStatus, getCurrentProcessingPage]);
+    const entry = Object.entries(pageStatus).find(
+      ([_, status]) =>
+        status.stage !== "pending" && status.stage !== "complete" && status.stage !== "error"
+    );
+    return entry ? pageStatus[entry[0]]?.stage || null : null;
+  }, [pageStatus]);
 
   return {
     pageStatus,

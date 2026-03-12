@@ -139,6 +139,14 @@ class RedactionJobService {
 
     return response.data;
   }
+
+  async downloadOriginalPdf(jobId: string): Promise<Blob> {
+    const response = await api.get<Blob>(`/api/jobs/${jobId}/download-original`, {
+      responseType: "blob",
+    });
+
+    return response.data;
+  }
 }
 
 class RedactionAgentService {

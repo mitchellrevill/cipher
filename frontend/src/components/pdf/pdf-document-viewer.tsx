@@ -124,6 +124,7 @@ function PdfPageCanvas({
   const [viewport, setViewport] = useState<PageViewport | null>(null);
   const [draftRect, setDraftRect] = useState<DraftRect | null>(null);
   const [isRendering, setIsRendering] = useState(true);
+  const overlayViewport = useMemo(() => viewport?.clone({ dontFlip: true }) ?? null, [viewport]);
 
   useEffect(() => {
     let cancelled = false;
@@ -184,19 +185,19 @@ function PdfPageCanvas({
   }, [pageNumber, pdfDocument, renderWidth]);
 
   const overlayBoxes = useMemo<OverlayBox[]>(() => {
-    if (!viewport) {
+    if (!overlayViewport) {
       return [];
     }
 
     return suggestions.flatMap((suggestion) =>
       suggestion.rects.map((rect) => ({
-        ...getOverlayBox(rect, viewport),
+        ...getOverlayBox(rect, overlayViewport),
         id: suggestion.id,
         approved: suggestion.approved,
         source: suggestion.source,
       }))
     );
-  }, [suggestions, viewport]);
+  }, [overlayViewport, suggestions]);
 
   const getPoint = (event: ReactPointerEvent<HTMLDivElement>) => {
     const bounds = overlayRef.current?.getBoundingClientRect();
@@ -211,7 +212,7 @@ function PdfPageCanvas({
   };
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drawMode || !viewport) {
+    if (!drawMode || !overlayViewport) {
       return;
     }
 
@@ -245,7 +246,7 @@ function PdfPageCanvas({
   };
 
   const finishDraft = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drawMode || !startPointRef.current || !viewport || !draftRect) {
+    if (!drawMode || !startPointRef.current || !overlayViewport || !draftRect) {
       startPointRef.current = null;
       return;
     }
@@ -259,8 +260,8 @@ function PdfPageCanvas({
       return;
     }
 
-    const [startX, startY] = viewport.convertToPdfPoint(start.x, start.y);
-    const [endX, endY] = viewport.convertToPdfPoint(point.x, point.y);
+    const [startX, startY] = overlayViewport.convertToPdfPoint(start.x, start.y);
+    const [endX, endY] = overlayViewport.convertToPdfPoint(point.x, point.y);
 
     onManualRedactionCreated?.(pageNumber - 1, {
       x0: Math.min(startX, endX),

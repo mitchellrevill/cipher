@@ -274,3 +274,18 @@ async def download_redacted(job_id: str, request: Request):
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{job_id}_redacted.pdf"'}
     )
+
+
+@router.get("/{job_id}/download-original")
+async def download_original(job_id: str, request: Request):
+    """Download original uploaded PDF."""
+    blob = _get_blob(request)
+    try:
+        pdf_bytes = await blob.download_original_pdf(job_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Original PDF not found")
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{job_id}_original.pdf"'}
+    )

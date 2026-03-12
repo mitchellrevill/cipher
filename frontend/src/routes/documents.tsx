@@ -202,6 +202,22 @@ export default function DocumentsRoute() {
     if (viewerMode === "original" && !localPdfUrl && redactedPreviewUrl) setViewerMode("redacted");
   }, [localPdfUrl, redactedPreviewUrl, viewerMode]);
 
+  // Load original PDF from server if not in local cache
+  useEffect(() => {
+    if (!selectedJobId || localPdfUrl) return;
+
+    const loadPdfFromServer = async () => {
+      try {
+        await loadOriginalPdf(selectedJobId);
+      } catch (error) {
+        // Silently fail — PDF might not be available yet or user can view redacted version
+        console.debug("Original PDF not available from server");
+      }
+    };
+
+    void loadPdfFromServer();
+  }, [selectedJobId, localPdfUrl]);
+
   useEffect(() => {
     if (selectedSuggestionId && !sortedSuggestions.some((s) => s.id === selectedSuggestionId)) {
       setSelectedSuggestionId(null);
@@ -240,6 +256,18 @@ export default function DocumentsRoute() {
       hasRedactedPdf: true,
     });
     return objectUrl;
+  }
+
+  async function loadOriginalPdf(jobId: string): Promise<string> {
+    try {
+      const blob = await redactionJobService.downloadOriginalPdf(jobId);
+      const objectUrl = URL.createObjectURL(blob);
+      registerLocalPdf(jobId, new File([blob], selectedRecentJob?.filename ?? "original.pdf", { type: "application/pdf" }));
+      return objectUrl;
+    } catch (error) {
+      console.error("Failed to load original PDF from server:", error);
+      throw error;
+    }
   }
 
   const uploadMutation = useMutation({

@@ -7,10 +7,11 @@ import {
   type PageViewport,
   type RenderTask,
 } from "pdfjs-dist";
-import { Loader2, SquareDashedMousePointer } from "lucide-react";
+import { Check, Loader2, SquareDashedMousePointer, X } from "lucide-react";
 import { Badge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { RedactionRect, Suggestion } from "@/api/services";
+import type { TextMatch } from "@/types/search";
 
 GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
 
@@ -49,7 +50,7 @@ function PageStatusBadge({ stage, stageLabel, errorMessage }: PageStatusBadgePro
       className={`absolute top-1 right-1 px-2 py-1 rounded text-xs font-medium ${bgColor} ${textColor}`}
       title={errorMessage || stageLabel}
     >
-      {stage === "complete" ? "✓" : stage === "error" ? "✗" : stageLabel.split(" ")[0]}
+      {stage === "complete" ? <Check className="inline-block h-3 w-3" /> : stage === "error" ? <X className="inline-block h-3 w-3" /> : stageLabel.split(" ")[0]}
     </div>
   );
 }
@@ -64,6 +65,8 @@ interface PdfDocumentViewerProps {
   onManualRedactionCreated?: (pageIndex: number, rect: RedactionRect) => void;
   onApprovalChange?: (suggestionId: string, approved: boolean) => void;
   pageStatus?: Record<number, { stage: string; stageLabel: string; errorMessage?: string }>;
+  searchMatches?: TextMatch[];
+  onSearchMatchRedacted?: (match: TextMatch) => void;
 }
 
 interface DraftRect {
@@ -80,6 +83,30 @@ interface OverlayBox extends DraftRect {
   text: string;
   category: string;
   reasoning: string;
+}
+
+interface HoverCardLayout {
+  placeLeft: boolean;
+  placeAbove: boolean;
+  width: number;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getHoverCardLayout(box: OverlayBox, viewport: PageViewport): HoverCardLayout {
+  const gap = 14;
+  const availableWidth = Math.max(180, viewport.width - 24);
+  const width = Math.min(availableWidth, clamp(viewport.width * 0.4, 220, 360));
+  const spaceRight = viewport.width - (box.left + box.width) - gap;
+  const spaceLeft = box.left - gap;
+
+  return {
+    placeLeft: spaceRight < Math.min(width, 240) && spaceLeft > spaceRight,
+    placeAbove: box.top + 168 > viewport.height && box.top > viewport.height * 0.32,
+    width,
+  };
 }
 
 function getDocumentPageIndex(pageNum: number, pageCount: number, prefersOneBased: boolean): number {
@@ -112,6 +139,8 @@ function PdfPageCanvas({
   onManualRedactionCreated,
   onApprovalChange,
   pageStatus,
+  searchMatches,
+  onSearchMatchRedacted,
 }: {
   pdfDocument: PDFDocumentProxy;
   pageNumber: number;
@@ -123,6 +152,8 @@ function PdfPageCanvas({
   onManualRedactionCreated?: (pageIndex: number, rect: RedactionRect) => void;
   onApprovalChange?: (suggestionId: string, approved: boolean) => void;
   pageStatus?: Record<number, { stage: string; stageLabel: string; errorMessage?: string }>;
+  searchMatches?: TextMatch[];
+  onSearchMatchRedacted?: (match: TextMatch) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -293,20 +324,22 @@ function PdfPageCanvas({
         ) : null}
       </div>
 
-      <div className="relative mx-auto w-fit overflow-hidden rounded-[1rem] border border-border/70 bg-muted/20">
-        <canvas ref={canvasRef} className="block max-w-full" />
-        {pageStatus?.[pageNumber - 1] && (
-          <PageStatusBadge
-            stage={pageStatus[pageNumber - 1].stage}
-            stageLabel={pageStatus[pageNumber - 1].stageLabel}
-            errorMessage={pageStatus[pageNumber - 1].errorMessage}
-          />
-        )}
+      <div className="relative mx-auto w-fit overflow-visible">
+        <div className="overflow-hidden rounded-[1rem] border border-border/70 bg-muted/20 shadow-[0_12px_32px_-20px_rgba(15,23,42,0.45)]">
+          <canvas ref={canvasRef} className="block max-w-full" />
+          {pageStatus?.[pageNumber - 1] && (
+            <PageStatusBadge
+              stage={pageStatus[pageNumber - 1].stage}
+              stageLabel={pageStatus[pageNumber - 1].stageLabel}
+              errorMessage={pageStatus[pageNumber - 1].errorMessage}
+            />
+          )}
+        </div>
         {viewport ? (
           <div
             ref={overlayRef}
             className={cn(
-              "absolute inset-0 select-none touch-none",
+              "absolute inset-0 select-none touch-none overflow-visible",
               drawMode ? "cursor-crosshair" : "cursor-default"
             )}
             onPointerDown={handlePointerDown}
@@ -317,11 +350,12 @@ function PdfPageCanvas({
             {overlayBoxes.map((box, index) => {
               const isSelected = selectedSuggestionId === box.id;
               const isHovered = hoveredBoxId === box.id;
+              const hoverCardLayout = overlayViewport ? getHoverCardLayout(box, overlayViewport) : null;
 
               return (
                 <div
                   key={`${box.id}-${index}`}
-                  className="group absolute"
+                  className="group absolute overflow-visible"
                   style={{
                     left: `${box.left}px`,
                     top: `${box.top}px`,
@@ -338,62 +372,45 @@ function PdfPageCanvas({
                   <button
                     type="button"
                     className={cn(
-                      "absolute inset-0 rounded-sm border transition-all",
+                      "absolute inset-0 rounded-md border transition-all duration-150",
                       box.approved
-                        ? "border-emerald-500/90 bg-emerald-400/18"
-                        : "border-amber-500/90 bg-amber-300/18",
-                      box.source === "manual" && "border-sky-500/90 bg-sky-400/18",
-                      isSelected && "ring-2 ring-offset-1 ring-slate-950/35"
+                        ? "border-emerald-500/90 bg-emerald-400/15 shadow-[0_0_0_1px_rgba(16,185,129,0.18)]"
+                        : "border-amber-500/90 bg-amber-300/14 shadow-[0_0_0_1px_rgba(245,158,11,0.18)]",
+                      box.source === "manual" && "border-sky-500/90 bg-sky-400/14 shadow-[0_0_0_1px_rgba(14,165,233,0.18)]",
+                      isSelected && "ring-2 ring-offset-1 ring-slate-950/35",
+                      isHovered && "shadow-[0_0_0_1px_rgba(15,23,42,0.08),0_10px_24px_-14px_rgba(15,23,42,0.45)]"
                     )}
                     onClick={() => onSuggestionSelect?.(box.id)}
+                    onFocus={() => setHoveredBoxId(box.id)}
+                    aria-label={`Review redaction suggestion: ${box.text || "Manual redaction"}`}
                   />
 
-                  {/* Hover actions and tooltip */}
-                  {isHovered && (
-                    <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/10 rounded-sm backdrop-blur-xs z-10">
-                      {/* Approve button */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onApprovalChange?.(box.id, true);
-                          setHoveredBoxId(null);
-                        }}
-                        className="flex h-6 w-6 items-center justify-center rounded bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
-                        title="Approve (A)"
-                      >
-                        ✓
-                      </button>
-                      {/* Reject button */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onApprovalChange?.(box.id, false);
-                          setHoveredBoxId(null);
-                        }}
-                        className="flex h-6 w-6 items-center justify-center rounded bg-red-500 text-white hover:bg-red-600 transition-colors"
-                        title="Reject (R)"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-
                   {/* Tooltip on hover */}
-                  {isHovered && (
-                    <div className="absolute left-full ml-2 top-0 z-20 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap shadow-lg pointer-events-none">
-                      <div className="font-semibold mb-1">{box.text || "Manual redaction"}</div>
-                      <div className="text-slate-300 mb-0.5">
-                        <span className="inline-block bg-slate-700/50 px-1.5 py-0.5 rounded text-[10px] mr-1">
-                          {box.category}
+                  {isHovered && hoverCardLayout ? (
+                    <div
+                      className={cn(
+                        "pointer-events-none absolute z-20 rounded-2xl border border-slate-200/80 bg-white/98 px-4 py-3 text-[0.8125rem] text-slate-700 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.45)] ring-1 ring-black/5 dark:border-slate-700/80 dark:bg-slate-950/96 dark:text-slate-100",
+                        hoverCardLayout.placeLeft ? "right-full mr-3" : "left-full ml-3",
+                        hoverCardLayout.placeAbove ? "bottom-0" : "top-0"
+                      )}
+                      style={{ width: `${hoverCardLayout.width}px`, maxWidth: "calc(100vw - 2rem)" }}
+                    >
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <span className="text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
+                          {box.source === "manual" ? "Manual redaction" : "AI suggestion"}
+                        </span>
+                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                          {box.category || "Sensitive"}
                         </span>
                       </div>
-                      <div className="text-slate-400 text-xs max-w-xs">
-                        {box.reasoning}
+                      <div className="mb-1.5 text-sm font-semibold leading-5 text-slate-950 dark:text-white">
+                        {box.text || "Manual redaction"}
+                      </div>
+                      <div className="text-[0.78rem] leading-5 text-slate-600 dark:text-slate-300 break-words">
+                        {box.reasoning || "Review this region and confirm whether it should remain redacted."}
                       </div>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               );
             })}
@@ -426,6 +443,8 @@ export function PdfDocumentViewer({
   onManualRedactionCreated,
   onApprovalChange,
   pageStatus,
+  searchMatches,
+  onSearchMatchRedacted,
 }: PdfDocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [documentHandle, setDocumentHandle] = useState<PDFDocumentProxy | null>(null);
@@ -544,10 +563,12 @@ export function PdfDocumentViewer({
                 pageNumber={index + 1}
                 renderWidth={renderWidth}
                 suggestions={pageSuggestions}
+                searchMatches={searchMatches}
                 selectedSuggestionId={selectedSuggestionId}
                 drawMode={drawMode}
                 onSuggestionSelect={onSuggestionSelect}
                 onManualRedactionCreated={onManualRedactionCreated}
+                onSearchMatchRedacted={onSearchMatchRedacted}
                 onApprovalChange={onApprovalChange}
                 pageStatus={pageStatus}
               />

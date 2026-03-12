@@ -19,6 +19,7 @@ export interface Suggestion {
   reasoning: string;
   context: string;
   page_num: number;
+  page_nums?: number[];
   rects: RedactionRect[];
   approved: boolean;
   source: SuggestionSource;

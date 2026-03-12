@@ -703,7 +703,7 @@ export default function DocumentsRoute() {
             }
             pageStatus={Object.fromEntries(
               Object.entries(pageStatus).map(([num, status]) => [
-                num,
+                parseInt(num, 10),
                 {
                   stage: status.stage,
                   stageLabel: getStageLabel(status.stage),
@@ -789,7 +789,14 @@ export default function DocumentsRoute() {
                         {suggestion.text || "Manual redaction"}
                       </div>
                       <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
-                        <span className="text-muted-foreground">p.{suggestion.page_num + 1}</span>
+                        {/* Show all pages where suggestion appears */}
+                        {suggestion.page_nums && suggestion.page_nums.length > 0 ? (
+                          <span className="text-muted-foreground text-xs">
+                            pp. {suggestion.page_nums.map(p => p + 1).join(", ")}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">p.{suggestion.page_num + 1}</span>
+                        )}
                         <Badge variant="outline" className="rounded-full text-[10px] px-1.5 py-0 capitalize border-border/60">
                           {suggestion.category}
                         </Badge>

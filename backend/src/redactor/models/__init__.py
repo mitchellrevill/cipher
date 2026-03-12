@@ -61,7 +61,6 @@ class AgentSession(BaseModel):
     previous_response_id: Optional[str] = None
 
 # New streaming models
-
 from redactor.models.streaming import (
     PageProcessingStage,
     PageStatusEvent,

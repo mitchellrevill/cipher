@@ -19,6 +19,41 @@ interface PdfSource {
   label: string;
 }
 
+interface PageStatusBadgeProps {
+  stage: string;
+  stageLabel: string;
+  errorMessage?: string;
+}
+
+function PageStatusBadge({ stage, stageLabel, errorMessage }: PageStatusBadgeProps) {
+  const bgColor = {
+    pending: "bg-slate-200 dark:bg-slate-700",
+    analyzing_layout: "bg-blue-200 dark:bg-blue-900 animate-pulse",
+    pii_detection: "bg-blue-200 dark:bg-blue-900 animate-pulse",
+    matching: "bg-blue-200 dark:bg-blue-900 animate-pulse",
+    complete: "bg-green-200 dark:bg-green-900",
+    error: "bg-red-200 dark:bg-red-900",
+  }[stage] || "bg-gray-200";
+
+  const textColor = {
+    pending: "text-slate-600 dark:text-slate-300",
+    analyzing_layout: "text-blue-600 dark:text-blue-300",
+    pii_detection: "text-blue-600 dark:text-blue-300",
+    matching: "text-blue-600 dark:text-blue-300",
+    complete: "text-green-600 dark:text-green-300",
+    error: "text-red-600 dark:text-red-300",
+  }[stage] || "text-gray-600";
+
+  return (
+    <div
+      className={`absolute top-1 right-1 px-2 py-1 rounded text-xs font-medium ${bgColor} ${textColor}`}
+      title={errorMessage || stageLabel}
+    >
+      {stage === "complete" ? "✓" : stage === "error" ? "✗" : stageLabel.split(" ")[0]}
+    </div>
+  );
+}
+
 interface PdfDocumentViewerProps {
   source?: PdfSource;
   suggestions: Suggestion[];
@@ -27,7 +62,7 @@ interface PdfDocumentViewerProps {
   selectedSuggestionId?: string | null;
   onSuggestionSelect?: (suggestionId: string) => void;
   onManualRedactionCreated?: (pageIndex: number, rect: RedactionRect) => void;
-  pageStatus?: Record<string, { stage: string; stageLabel: string; errorMessage?: string }>;
+  pageStatus?: Record<number, { stage: string; stageLabel: string; errorMessage?: string }>;
 }
 
 interface DraftRect {
@@ -71,6 +106,7 @@ function PdfPageCanvas({
   drawMode = false,
   onSuggestionSelect,
   onManualRedactionCreated,
+  pageStatus,
 }: {
   pdfDocument: PDFDocumentProxy;
   pageNumber: number;
@@ -80,6 +116,7 @@ function PdfPageCanvas({
   drawMode?: boolean;
   onSuggestionSelect?: (suggestionId: string) => void;
   onManualRedactionCreated?: (pageIndex: number, rect: RedactionRect) => void;
+  pageStatus?: Record<number, { stage: string; stageLabel: string; errorMessage?: string }>;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -247,6 +284,13 @@ function PdfPageCanvas({
 
       <div className="relative mx-auto w-fit overflow-hidden rounded-[1rem] border border-border/70 bg-muted/20">
         <canvas ref={canvasRef} className="block max-w-full" />
+        {pageStatus?.[pageNumber - 1] && (
+          <PageStatusBadge
+            stage={pageStatus[pageNumber - 1].stage}
+            stageLabel={pageStatus[pageNumber - 1].stageLabel}
+            errorMessage={pageStatus[pageNumber - 1].errorMessage}
+          />
+        )}
         {viewport ? (
           <div
             ref={overlayRef}
@@ -311,6 +355,7 @@ export function PdfDocumentViewer({
   selectedSuggestionId,
   onSuggestionSelect,
   onManualRedactionCreated,
+  pageStatus,
 }: PdfDocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [documentHandle, setDocumentHandle] = useState<PDFDocumentProxy | null>(null);
@@ -433,6 +478,7 @@ export function PdfDocumentViewer({
                 drawMode={drawMode}
                 onSuggestionSelect={onSuggestionSelect}
                 onManualRedactionCreated={onManualRedactionCreated}
+                pageStatus={pageStatus}
               />
             );
           })}

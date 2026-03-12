@@ -61,7 +61,7 @@ export function usePageProcessingStatus(totalPages: number) {
       ([_, status]) =>
         status.stage !== "pending" && status.stage !== "complete" && status.stage !== "error"
     );
-    return entry ? pageStatus[entry[0]]?.stage || null : null;
+    return entry ? pageStatus[parseInt(entry[0], 10)]?.stage || null : null;
   }, [pageStatus]);
 
   return {

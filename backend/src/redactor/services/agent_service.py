@@ -3,42 +3,69 @@
 from typing import Optional, Dict
 from datetime import datetime
 import uuid
-from openai import AsyncAzureOpenAI
+import logging
 
-from redactor.agent.orchestrator import RedactionOrchestrator
+from redactor.agent.agent_loop import AgentLoop
+from redactor.agent.tools.registry import ToolRegistry
+from redactor.agent.tools.search import SearchTool
+from redactor.agent.tools.workspace import (
+    GetWorkspaceStateTool,
+    CreateRuleTool,
+    ApplyRuleTool,
+    ExcludeDocumentTool
+)
+from redactor.agent.knowledge_base import KnowledgeBase
 from redactor.config import get_settings
 from redactor.services.job_service import JobService
 from redactor.services.workspace_service import WorkspaceService
+
+logger = logging.getLogger(__name__)
 
 
 class AgentService:
     """
     AI agent service for conversational assistance with document redaction.
 
-    Manages chat sessions and OpenAI turn execution.
-    Provides context-aware responses about redaction decisions.
+    Manages chat sessions and uses an agent loop with tool execution for
+    context-aware responses about redaction decisions.
     """
 
     def __init__(
         self,
-        oai_client: AsyncAzureOpenAI,
+        oai_client,
         job_service: JobService,
-        workspace_service: WorkspaceService | None = None,
-        orchestrator: RedactionOrchestrator | None = None,
+        workspace_service: Optional[WorkspaceService] = None,
+        workspace_toolbox=None,
     ):
         """
-        Initialize AgentService.
+        Initialize AgentService with agent framework components.
 
         Args:
             oai_client: Azure OpenAI async client
             job_service: JobService for accessing job context
+            workspace_service: WorkspaceService for managing workspaces
+            workspace_toolbox: Workspace tools for backward compatibility
         """
         self.oai_client = oai_client
         self.job_service = job_service
         self.workspace_service = workspace_service
-        self.orchestrator = orchestrator
+        self.workspace_toolbox = workspace_toolbox
         self.settings = get_settings()
         self.sessions = {}  # In-memory session cache; will use Cosmos DB (Task 9)
+
+        # Initialize knowledge base
+        self.knowledge_base = KnowledgeBase(workspace_service=workspace_service)
+
+        # Initialize tool registry
+        self.tool_registry = ToolRegistry()
+        self._register_tools()
+
+        # Initialize agent loop
+        self.agent_loop = AgentLoop(
+            tool_registry=self.tool_registry,
+            oai_client=oai_client,
+            knowledge_base=self.knowledge_base
+        )
 
     async def create_session(self, job_id: str, workspace_id: Optional[str] = None) -> Dict:
         """
@@ -91,6 +118,14 @@ class AgentService:
             }
             self.sessions[session_id]["messages"].append(message)
 
+    def _register_tools(self):
+        """Register all available tools with the registry."""
+        self.tool_registry.register(SearchTool(workspace_toolbox=self.workspace_toolbox))
+        self.tool_registry.register(GetWorkspaceStateTool(workspace_service=self.workspace_service))
+        self.tool_registry.register(CreateRuleTool(workspace_service=self.workspace_service))
+        self.tool_registry.register(ApplyRuleTool(workspace_service=self.workspace_service))
+        self.tool_registry.register(ExcludeDocumentTool(workspace_service=self.workspace_service))
+
     async def run_turn(
         self,
         job_id: str,
@@ -100,113 +135,60 @@ class AgentService:
         session_id: Optional[str] = None,
     ) -> Dict:
         """
-        Run an agent turn with Azure OpenAI.
+        Run an agent turn using the agent loop.
 
-        Sends message to OpenAI with job context, receives response.
+        Sends message to agent loop with job context, receives response with
+        potential tool executions and directives.
 
         Args:
             job_id: Job identifier for context
             message: User message
             previous_response_id: Optional ID of previous response for continuation
+            workspace_id: Optional workspace ID for context
+            session_id: Optional session ID for conversation history
 
         Returns:
-            Dict with text, response_id, and optional tool_calls
+            Dict with text, response_id, tool_calls, and directives
         """
         try:
+            # Verify job exists
             job = await self.job_service.get_job(job_id)
+            if not job:
+                return {
+                    "text": f"Job '{job_id}' not found",
+                    "response_id": None,
+                    "tool_calls": [],
+                    "directives": [],
+                }
+
+            # Update workspace in session if provided
             if session_id and workspace_id and session_id in self.sessions:
                 self.sessions[session_id]["workspace_id"] = workspace_id
-            active_workspace_id = workspace_id or self._get_session_workspace_id(session_id)
-            workspace_context = await self._load_workspace_context(active_workspace_id)
-            session_messages = self.sessions.get(session_id, {}).get("messages", []) if session_id else []
 
-            if self.orchestrator is not None:
-                response = await self.orchestrator.run_turn(
-                    user_message=message,
-                    job_id=job_id,
-                    workspace_context=workspace_context,
-                    session_messages=session_messages,
-                )
-                response.setdefault("response_id", str(uuid.uuid4()))
-                response.setdefault("tool_calls", [])
-                response.setdefault("directives", [])
-                return response
+            # Get session messages for context
+            session_messages = []
+            if session_id and session_id in self.sessions:
+                session_messages = [
+                    {"role": msg["role"], "content": msg["text"]}
+                    for msg in self.sessions[session_id].get("messages", [])[-6:]
+                ]
 
-            response = await self.oai_client.chat.completions.create(
-                model=self.settings.azure_openai_deployment,
-                messages=[
-                    {"role": "system", "content": self._build_system_prompt(job, workspace_context)},
-                    {"role": "user", "content": message}
-                ],
-                temperature=0.7,
-                max_tokens=500
+            # Run agent turn
+            response = await self.agent_loop.run_turn(
+                user_message=message,
+                job_id=job_id,
+                workspace_id=workspace_id,
+                session_messages=session_messages
             )
 
-            assistant_message = response.choices[0].message.content
-            response_id = str(uuid.uuid4())
-
-            return {
-                "text": assistant_message,
-                "response_id": response_id,
-                "tool_calls": [],
-                "directives": [],
-            }
+            response["response_id"] = response.get("response_id") or str(uuid.uuid4())
+            return response
 
         except Exception as e:
+            logger.exception("Error in agent turn")
             return {
                 "text": f"Error processing request: {str(e)}",
                 "response_id": None,
                 "tool_calls": [],
                 "directives": [],
             }
-
-    async def _load_workspace_context(self, workspace_id: Optional[str]) -> Optional[Dict]:
-        if not workspace_id or self.workspace_service is None:
-            return None
-
-        try:
-            workspace = await self.workspace_service.get_workspace_state(workspace_id)
-            if not workspace:
-                return None
-
-            enriched_documents = []
-            for document in workspace.get("documents", []):
-                document_id = document.get("id")
-                job = await self.job_service.get_job(document_id) if document_id else None
-                enriched_documents.append(
-                    {
-                        **document,
-                        "filename": getattr(job, "filename", None) if job else None,
-                        "status": getattr(getattr(job, "status", None), "value", None) if job else None,
-                        "page_count": getattr(job, "page_count", 0) if job else 0,
-                        "suggestions_count": len(getattr(job, "suggestions", [])) if job else 0,
-                    }
-                )
-
-            workspace["documents"] = enriched_documents
-            return workspace
-        except Exception:
-            return None
-
-    def _get_session_workspace_id(self, session_id: Optional[str]) -> Optional[str]:
-        if not session_id:
-            return None
-        session = self.sessions.get(session_id)
-        if not session:
-            return None
-        return session.get("workspace_id")
-
-    def _build_system_prompt(self, job, workspace_context: Optional[Dict]) -> str:
-        prompt = (
-            f"You are a helpful assistant assisting with document redaction. "
-            f"The user is working with document: {job.filename if job else 'unknown'}. "
-            f"Provide clear, concise answers about redaction decisions and suggestions."
-        )
-        if workspace_context:
-            prompt += (
-                f" Current workspace: {workspace_context.get('name', 'unknown')} with "
-                f"{len(workspace_context.get('documents', []))} documents, "
-                f"{len(workspace_context.get('rules', []))} rules, and "
-                f"{len(workspace_context.get('exclusions', []))} exclusions."
-            )
-        return prompt

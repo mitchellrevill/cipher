@@ -3,13 +3,13 @@ from redactor.agent.tools.base import Tool, ToolResult
 
 
 class SearchTool(Tool):
-    """Search for text in workspace documents."""
+    """Search for text in document suggestions."""
 
     name = "search_document"
-    description = "Search for text in the current document or workspace. Returns matching locations with page numbers and coordinates."
+    description = "Search for text in the current document suggestions. Returns matching locations with page numbers and coordinates."
 
-    def __init__(self, workspace_toolbox=None):
-        self.workspace_toolbox = workspace_toolbox
+    def __init__(self, job_service=None):
+        self.job_service = job_service
 
     @property
     def schema(self) -> Dict[str, Any]:
@@ -22,30 +22,56 @@ class SearchTool(Tool):
                 },
                 "doc_id": {
                     "type": "string",
-                    "description": "Optional document ID to search in (searches workspace by default)"
+                    "description": "Document ID to search in"
                 }
             },
-            "required": ["query"]
+            "required": ["query", "doc_id"]
         }
 
-    async def execute(self, query: str, doc_id: Optional[str] = None, **kwargs) -> ToolResult:
-        """Execute search."""
-        if not self.workspace_toolbox:
+    async def execute(self, query: str, doc_id: str, **kwargs) -> ToolResult:
+        """Execute search in document suggestions."""
+        if not self.job_service:
             return ToolResult(
                 success=False,
-                error="Workspace toolbox not configured"
+                error="Job service not configured"
             )
 
         try:
-            results = await self.workspace_toolbox.search_document(
-                query=query,
-                doc_id=doc_id
-            )
+            job = await self.job_service.get_job(doc_id)
+            if not job:
+                return ToolResult(
+                    success=False,
+                    error=f"Document '{doc_id}' not found"
+                )
+
+            query_lower = query.lower().strip()
+            results = []
+
+            # Search through suggestions
+            for suggestion in getattr(job, "suggestions", []):
+                haystacks = [
+                    suggestion.text or "",
+                    suggestion.context or "",
+                    suggestion.reasoning or ""
+                ]
+                if query_lower and not any(query_lower in haystack.lower() for haystack in haystacks):
+                    continue
+
+                results.append({
+                    "id": suggestion.id,
+                    "text": suggestion.text,
+                    "category": suggestion.category,
+                    "page": suggestion.page_num,
+                    "context": suggestion.context,
+                    "reasoning": suggestion.reasoning,
+                    "approved": suggestion.approved,
+                })
 
             return ToolResult(
                 success=True,
                 data={
                     "query": query,
+                    "document_id": doc_id,
                     "results": results,
                     "count": len(results)
                 }

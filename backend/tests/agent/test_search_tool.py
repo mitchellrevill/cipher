@@ -1,29 +1,36 @@
 import pytest
+from unittest.mock import AsyncMock, MagicMock
 from redactor.agent.tools.search import SearchTool
 from redactor.agent.tools.base import ToolResult
-
-
-class MockWorkspaceToolbox:
-    async def search_document(self, query: str, doc_id: str = None, workspace_id: str = None):
-        if query == "not found":
-            return []
-        return [
-            {
-                "document_id": doc_id or "doc1",
-                "page": 1,
-                "text": f"Found: {query}",
-                "coords": [[10, 20, 30, 40]]
-            }
-        ]
+from redactor.models import Suggestion, RedactionRect
+from datetime import datetime
 
 
 @pytest.mark.asyncio
 async def test_search_tool_finds_text():
     """Search tool should find matching text in documents."""
-    toolbox = MockWorkspaceToolbox()
-    tool = SearchTool(workspace_toolbox=toolbox)
+    mock_job_service = AsyncMock()
+    suggestion = Suggestion(
+        id="s1",
+        job_id="job1",
+        text="test data",
+        category="PII",
+        reasoning="Found test",
+        context="This is test data",
+        page_num=0,
+        rects=[RedactionRect(x0=0, y0=0, x1=1, y1=1)],
+        approved=False,
+        source="ai",
+        created_at=datetime.utcnow(),
+    )
+    mock_job_service.get_job.return_value = MagicMock(
+        job_id="job1",
+        filename="test.pdf",
+        suggestions=[suggestion]
+    )
 
-    result = await tool.execute(query="test", doc_id="doc1")
+    tool = SearchTool(job_service=mock_job_service)
+    result = await tool.execute(query="test", doc_id="job1")
 
     assert result.success
     assert len(result.data["results"]) == 1
@@ -33,19 +40,26 @@ async def test_search_tool_finds_text():
 @pytest.mark.asyncio
 async def test_search_tool_returns_no_results():
     """Search tool should return empty results when nothing found."""
-    toolbox = MockWorkspaceToolbox()
-    tool = SearchTool(workspace_toolbox=toolbox)
+    mock_job_service = AsyncMock()
+    mock_job_service.get_job.return_value = MagicMock(
+        job_id="job1",
+        filename="test.pdf",
+        suggestions=[]
+    )
 
-    result = await tool.execute(query="not found")
+    tool = SearchTool(job_service=mock_job_service)
+    result = await tool.execute(query="not found", doc_id="job1")
 
     assert result.success
     assert result.data["results"] == []
 
 
 def test_search_tool_has_correct_schema():
-    """Search tool schema should define query parameter."""
-    tool = SearchTool(workspace_toolbox=None)
+    """Search tool schema should define query and doc_id parameters."""
+    tool = SearchTool(job_service=None)
     schema = tool.schema
 
     assert "query" in schema["properties"]
+    assert "doc_id" in schema["properties"]
     assert "query" in schema["required"]
+    assert "doc_id" in schema["required"]

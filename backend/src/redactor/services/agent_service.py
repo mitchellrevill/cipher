@@ -117,8 +117,7 @@ class AgentService:
 
     def _register_tools(self):
         """Register all available tools with the registry."""
-        # Note: SearchTool does not require workspace_toolbox; pass None is acceptable
-        self.tool_registry.register(SearchTool())
+        self.tool_registry.register(SearchTool(job_service=self.job_service))
         self.tool_registry.register(GetWorkspaceStateTool(workspace_service=self.workspace_service))
         self.tool_registry.register(CreateRuleTool(workspace_service=self.workspace_service))
         self.tool_registry.register(ApplyRuleTool(workspace_service=self.workspace_service))

@@ -49,7 +49,6 @@ async def test_agent_service_create_session():
         oai_client=MockOpenAIClient(),
         job_service=mock_job_service,
         workspace_service=None,
-        workspace_toolbox=None
     )
 
     # Create session
@@ -72,7 +71,6 @@ async def test_agent_service_save_message():
         oai_client=MockOpenAIClient(),
         job_service=mock_job_service,
         workspace_service=None,
-        workspace_toolbox=None
     )
 
     # Create session
@@ -99,7 +97,6 @@ async def test_agent_service_full_flow():
         oai_client=MockOpenAIClient(),
         job_service=mock_job_service,
         workspace_service=None,
-        workspace_toolbox=None
     )
 
     # Create session
@@ -133,7 +130,6 @@ async def test_agent_service_run_turn_nonexistent_job():
         oai_client=MockOpenAIClient(),
         job_service=mock_job_service,
         workspace_service=None,
-        workspace_toolbox=None
     )
 
     # Create session
@@ -163,7 +159,6 @@ async def test_agent_service_multiple_turns():
         oai_client=MockOpenAIClient(),
         job_service=mock_job_service,
         workspace_service=None,
-        workspace_toolbox=None
     )
 
     # Create session
@@ -209,7 +204,6 @@ async def test_agent_service_with_workspace_context():
         oai_client=MockOpenAIClient(),
         job_service=mock_job_service,
         workspace_service=None,
-        workspace_toolbox=None
     )
 
     # Create session
@@ -242,7 +236,6 @@ async def test_agent_service_initialization():
         oai_client=MockOpenAIClient(),
         job_service=mock_job_service,
         workspace_service=mock_workspace_service,
-        workspace_toolbox=None
     )
 
     # Verify all components are initialized

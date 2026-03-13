@@ -35,8 +35,6 @@ class AgentService:
         oai_client,
         job_service: JobService,
         workspace_service: Optional[WorkspaceService] = None,
-        workspace_toolbox=None,
-        orchestrator=None,
     ):
         """
         Initialize AgentService with agent framework components.
@@ -45,14 +43,10 @@ class AgentService:
             oai_client: Azure OpenAI async client
             job_service: JobService for accessing job context
             workspace_service: WorkspaceService for managing workspaces
-            workspace_toolbox: Workspace tools for backward compatibility
-            orchestrator: Optional RedactionOrchestrator for workspace-aware processing
         """
         self.oai_client = oai_client
         self.job_service = job_service
         self.workspace_service = workspace_service
-        self.workspace_toolbox = workspace_toolbox
-        self.orchestrator = orchestrator
         self.settings = get_settings()
         self.sessions = {}  # In-memory session cache; will use Cosmos DB (Task 9)
 
@@ -123,7 +117,8 @@ class AgentService:
 
     def _register_tools(self):
         """Register all available tools with the registry."""
-        self.tool_registry.register(SearchTool(workspace_toolbox=self.workspace_toolbox))
+        # Note: SearchTool does not require workspace_toolbox; pass None is acceptable
+        self.tool_registry.register(SearchTool())
         self.tool_registry.register(GetWorkspaceStateTool(workspace_service=self.workspace_service))
         self.tool_registry.register(CreateRuleTool(workspace_service=self.workspace_service))
         self.tool_registry.register(ApplyRuleTool(workspace_service=self.workspace_service))
@@ -138,10 +133,10 @@ class AgentService:
         session_id: Optional[str] = None,
     ) -> Dict:
         """
-        Run an agent turn using the agent loop or orchestrator.
+        Run an agent turn using the agent loop.
 
-        Sends message to agent loop/orchestrator with job context, receives response with
-        potential tool executions and directives.
+        Sends message to agent loop with job context, receives response with
+        tool executions and directives.
 
         Args:
             job_id: Job identifier for context
@@ -176,35 +171,21 @@ class AgentService:
                     for msg in self.sessions[session_id].get("messages", [])[-6:]
                 ]
 
-            # Use orchestrator if available and workspace_id is provided
-            if self.orchestrator and workspace_id:
-                # Load workspace context for orchestrator
-                workspace_context = None
-                if self.workspace_service:
-                    workspace_context = await self.workspace_service.get_workspace(workspace_id)
-
-                response = await self.orchestrator.run_turn(
-                    user_message=message,
-                    job_id=job_id,
-                    workspace_context=workspace_context,
-                    session_messages=session_messages
-                )
-            else:
-                # Run agent turn via agent loop
-                response = await self.agent_loop.run_turn(
-                    user_message=message,
-                    job_id=job_id,
-                    workspace_id=workspace_id,
-                    session_messages=session_messages
-                )
+            # Run agent turn via agent loop
+            response = await self.agent_loop.run_turn(
+                user_message=message,
+                job_id=job_id,
+                workspace_id=workspace_id,
+                session_messages=session_messages
+            )
 
             response["response_id"] = response.get("response_id") or str(uuid.uuid4())
             return response
 
-        except Exception as e:
+        except Exception:
             logger.exception("Error in agent turn")
             return {
-                "text": f"Error processing request: {str(e)}",
+                "text": "Error processing request",
                 "response_id": None,
                 "tool_calls": [],
                 "directives": [],

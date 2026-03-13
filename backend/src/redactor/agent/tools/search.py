@@ -29,6 +29,8 @@ class DocumentTools:
                 return f"Error: document '{doc_id}' not found"
 
             query_lower = query.lower().strip()
+            if not query_lower:
+                return "Error: query must not be empty"
             results = []
             for suggestion in getattr(job, "suggestions", []):
                 haystacks = [

@@ -67,3 +67,12 @@ async def test_search_document_returns_error_when_service_missing():
     tools = DocumentTools(job_service=None)
     result = await tools.search_document(query="test", doc_id="doc1")
     assert "not configured" in result.lower()
+
+
+@pytest.mark.asyncio
+async def test_search_document_returns_error_for_empty_query():
+    """search_document returns error string when query is empty."""
+    mock_job_service = AsyncMock()
+    tools = DocumentTools(job_service=mock_job_service)
+    result = await tools.search_document(query="", doc_id="doc1")
+    assert "empty" in result.lower()

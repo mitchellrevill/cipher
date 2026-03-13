@@ -1,5 +1,4 @@
 # backend/src/redactor/agent/tools/__init__.py
-from redactor.agent.tools.base import Tool, ToolResult
-from redactor.agent.tools.registry import ToolRegistry
+from redactor.agent.tools.search import DocumentTools
 
-__all__ = ["Tool", "ToolResult", "ToolRegistry"]
+__all__ = ["DocumentTools"]

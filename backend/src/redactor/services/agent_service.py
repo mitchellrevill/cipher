@@ -5,15 +5,6 @@ from datetime import datetime
 import uuid
 import logging
 
-from redactor.agent.agent_loop import AgentLoop
-from redactor.agent.tools.registry import ToolRegistry
-from redactor.agent.tools.search import SearchTool
-from redactor.agent.tools.workspace import (
-    GetWorkspaceStateTool,
-    CreateRuleTool,
-    ApplyRuleTool,
-    ExcludeDocumentTool
-)
 from redactor.agent.knowledge_base import KnowledgeBase
 from redactor.config import get_settings
 from redactor.services.job_service import JobService
@@ -52,17 +43,6 @@ class AgentService:
 
         # Initialize knowledge base
         self.knowledge_base = KnowledgeBase(workspace_service=workspace_service)
-
-        # Initialize tool registry
-        self.tool_registry = ToolRegistry()
-        self._register_tools()
-
-        # Initialize agent loop
-        self.agent_loop = AgentLoop(
-            tool_registry=self.tool_registry,
-            oai_client=oai_client,
-            knowledge_base=self.knowledge_base
-        )
 
     async def create_session(self, job_id: str, workspace_id: Optional[str] = None) -> Dict:
         """
@@ -115,14 +95,6 @@ class AgentService:
             }
             self.sessions[session_id]["messages"].append(message)
 
-    def _register_tools(self):
-        """Register all available tools with the registry."""
-        self.tool_registry.register(SearchTool(job_service=self.job_service))
-        self.tool_registry.register(GetWorkspaceStateTool(workspace_service=self.workspace_service))
-        self.tool_registry.register(CreateRuleTool(workspace_service=self.workspace_service))
-        self.tool_registry.register(ApplyRuleTool(workspace_service=self.workspace_service))
-        self.tool_registry.register(ExcludeDocumentTool(workspace_service=self.workspace_service))
-
     async def run_turn(
         self,
         job_id: str,
@@ -170,15 +142,13 @@ class AgentService:
                     for msg in self.sessions[session_id].get("messages", [])[-6:]
                 ]
 
-            # Run agent turn via agent loop
-            response = await self.agent_loop.run_turn(
-                user_message=message,
-                job_id=job_id,
-                workspace_id=workspace_id,
-                session_messages=session_messages
-            )
-
-            response["response_id"] = response.get("response_id") or str(uuid.uuid4())
+            # TODO: Run agent turn via agent_framework Agent (Task 5)
+            response = {
+                "text": "Agent loop not yet implemented",
+                "response_id": str(uuid.uuid4()),
+                "tool_calls": [],
+                "directives": [],
+            }
             return response
 
         except Exception:

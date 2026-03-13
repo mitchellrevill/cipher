@@ -1,7 +1,6 @@
 """Service layer dependency injection container."""
 
 from dependency_injector import containers, providers
-from redactor.agent.orchestrator import RedactionOrchestrator
 from redactor.services.job_service import JobService
 from redactor.services.redaction_service import RedactionService
 from redactor.services.agent_service import AgentService
@@ -195,19 +194,12 @@ def _create_rule_engine():
     return RuleEngine()
 
 
-def _create_orchestrated_agent_service(oai_client, job_service, redaction_service, workspace_service, rule_engine):
-    """Factory function to create AgentService with workspace-aware orchestration."""
+def _create_agent_service_with_workspace(oai_client, job_service, workspace_service):
+    """Factory function to create AgentService with workspace support."""
     return AgentService(
         oai_client=oai_client,
         job_service=job_service,
         workspace_service=workspace_service,
-        orchestrator=RedactionOrchestrator(
-            oai_client=oai_client,
-            job_service=job_service,
-            redaction_service=redaction_service,
-            workspace_service=workspace_service,
-            rule_engine=rule_engine,
-        ),
     )
 
 
@@ -244,10 +236,8 @@ class ServicesContainer(containers.DeclarativeContainer):
     rule_engine = providers.Factory(_create_rule_engine)
 
     agent_service = providers.Factory(
-        _create_orchestrated_agent_service,
+        _create_agent_service_with_workspace,
         oai_client=providers.Callable(lambda c: c.clients.oai_client(), clients),
         job_service=job_service,
-        redaction_service=redaction_service,
         workspace_service=workspace_service,
-        rule_engine=rule_engine,
     )

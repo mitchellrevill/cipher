@@ -33,6 +33,7 @@ async def lifespan(app: FastAPI):
         logger.info(f"  azure_storage_account_key={'<redacted>' if settings.azure_storage_account_key else None}")
         logger.info(f"  cosmos_endpoint={settings.cosmos_endpoint!r}")
         logger.info(f"  azure_openai_endpoint={settings.azure_openai_endpoint!r}")
+        logger.info(f"  azure_openai_key={'<redacted>' if settings.azure_openai_key else 'NOT SET'}")
 
         container = AppContainer()
         container.config.from_dict({
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI):
             'azure_storage_account_url': settings.azure_storage_account_url,
             'azure_storage_account_key': settings.azure_storage_account_key,
             'azure_openai_endpoint': settings.azure_openai_endpoint,
+            'azure_openai_key': settings.azure_openai_key,
             'azure_openai_api_version': settings.azure_openai_api_version,
         })
 

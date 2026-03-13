@@ -103,7 +103,10 @@ async def test_run_turn(agent_service, mock_oai_client, mock_job_service):
 
     mock_oai_client.chat.completions.create = AsyncMock(
         return_value=MagicMock(
-            choices=[MagicMock(message=MagicMock(content="3 redactions were found."))]
+            choices=[MagicMock(message=MagicMock(
+                content="3 redactions were found.",
+                tool_calls=None
+            ))]
         )
     )
 

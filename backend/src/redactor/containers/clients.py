@@ -45,15 +45,17 @@ def _validate_and_create_blob(
     return get_blob_storage(account_url, "redacted-jobs", account_key=account_key)
 
 
-def _validate_and_create_oai(azure_endpoint: Optional[str], credential, api_version: Optional[str]) -> AsyncAzureOpenAI:
+def _validate_and_create_oai(azure_endpoint: Optional[str], api_key: Optional[str], api_version: Optional[str]) -> AsyncAzureOpenAI:
     """Validate and create Azure OpenAI client."""
     if not azure_endpoint:
         raise ValueError("Azure OpenAI endpoint required but not set in config")
+    if not api_key:
+        raise ValueError("Azure OpenAI API key required but not set in config")
     if not api_version:
         raise ValueError("Azure OpenAI API version required but not set in config")
     return AsyncAzureOpenAI(
+        api_key=api_key,
         azure_endpoint=azure_endpoint,
-        credential=credential,
         api_version=api_version
     )
 
@@ -81,7 +83,7 @@ class ClientsSubcontainer(containers.DeclarativeContainer):
     oai_client = providers.Singleton(
         _validate_and_create_oai,
         azure_endpoint=config.azure_openai_endpoint,
-        credential=credential,
+        api_key=config.azure_openai_key,
         api_version=config.azure_openai_api_version
     )
 

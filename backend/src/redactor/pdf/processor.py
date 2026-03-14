@@ -1,4 +1,5 @@
 import io
+import re
 from typing import Optional
 import fitz  # PyMuPDF
 from PIL import Image
@@ -29,6 +30,58 @@ class PDFProcessor:
         finally:
             doc.close()
         return images
+
+    def search_text(self, pattern: str, *, flags: int = re.IGNORECASE) -> list[dict]:
+        """Search page text with a regex and return PDF-space rectangles for matches."""
+        doc = fitz.open(stream=self._bytes, filetype="pdf")
+        try:
+            regex = re.compile(pattern, flags)
+            matches = []
+
+            for page_num, page in enumerate(doc):
+                page_text = page.get_text("text") or ""
+                if not page_text.strip():
+                    continue
+
+                seen_rects = set()
+                for match in regex.finditer(page_text):
+                    matched_text = match.group(0).strip()
+                    if not matched_text:
+                        continue
+
+                    rects = [
+                        RedactionRect(x0=rect.x0, y0=rect.y0, x1=rect.x1, y1=rect.y1)
+                        for rect in page.search_for(matched_text)
+                    ]
+                    if not rects:
+                        continue
+
+                    context_start = max(0, match.start() - 40)
+                    context_end = min(len(page_text), match.end() + 40)
+                    context = page_text[context_start:context_end].strip()
+
+                    for rect in rects:
+                        signature = (
+                            round(rect.x0, 3),
+                            round(rect.y0, 3),
+                            round(rect.x1, 3),
+                            round(rect.y1, 3),
+                        )
+                        if signature in seen_rects:
+                            continue
+                        seen_rects.add(signature)
+                        matches.append(
+                            {
+                                "page_num": page_num,
+                                "text": matched_text,
+                                "context": context,
+                                "rects": [rect],
+                            }
+                        )
+
+            return matches
+        finally:
+            doc.close()
 
     def apply_redactions(self, rects_by_page: dict[int, list[RedactionRect]]) -> bytes:
         """

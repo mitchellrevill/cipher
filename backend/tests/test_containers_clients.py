@@ -1,18 +1,18 @@
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch
 from redactor.containers.clients import ClientsContainer
 
 @patch('redactor.containers.clients.CosmosClient')
-@patch('redactor.containers.clients.BlobServiceClient')
-@patch('redactor.containers.clients.AsyncAzureOpenAI')
+@patch('redactor.containers.clients.AzureOpenAIResponsesClient')
 @patch('redactor.containers.clients.DefaultAzureCredential')
-def test_clients_container_creates_singletons(mock_cred, mock_oai, mock_blob, mock_cosmos):
+def test_clients_container_creates_singletons(mock_cred, mock_oai, mock_cosmos):
     """Verify container creates singleton clients on demand."""
     container = ClientsContainer()
     container.config.from_dict({
         'cosmos_endpoint': 'https://test.documents.azure.com:443/',
         'azure_storage_account_url': 'https://test.blob.core.windows.net',
         'azure_openai_endpoint': 'https://test.openai.azure.com/',
+        'azure_openai_deployment': 'gpt-4o',
         'azure_openai_api_version': '2024-02-01',
     })
 
@@ -29,6 +29,7 @@ def test_clients_container_requires_cosmos_endpoint():
     container.config.from_dict({
         'azure_storage_account_url': 'https://test.blob.core.windows.net',
         'azure_openai_endpoint': 'https://test.openai.azure.com/',
+        'azure_openai_deployment': 'gpt-4o',
         'azure_openai_api_version': '2024-02-01',
     })
 
@@ -41,6 +42,7 @@ def test_clients_container_requires_storage_url():
     container.config.from_dict({
         'cosmos_endpoint': 'https://test.documents.azure.com:443/',
         'azure_openai_endpoint': 'https://test.openai.azure.com/',
+        'azure_openai_deployment': 'gpt-4o',
         'azure_openai_api_version': '2024-02-01',
     })
 
@@ -59,6 +61,19 @@ def test_clients_container_requires_oai_endpoint():
     with pytest.raises(ValueError, match="Azure OpenAI endpoint"):
         container.clients.oai_client()
 
+def test_clients_container_requires_oai_deployment():
+    """Verify container raises ValueError when OpenAI deployment is missing."""
+    container = ClientsContainer()
+    container.config.from_dict({
+        'cosmos_endpoint': 'https://test.documents.azure.com:443/',
+        'azure_storage_account_url': 'https://test.blob.core.windows.net',
+        'azure_openai_endpoint': 'https://test.openai.azure.com/',
+        'azure_openai_api_version': '2024-02-01',
+    })
+
+    with pytest.raises(ValueError, match="Azure OpenAI deployment"):
+        container.clients.oai_client()
+
 @patch.dict('os.environ', {'AZURE_ENV': 'production'})
 @patch('redactor.containers.clients.ManagedIdentityCredential')
 def test_credential_uses_managed_identity_in_production(mock_managed_id):
@@ -68,6 +83,7 @@ def test_credential_uses_managed_identity_in_production(mock_managed_id):
         'cosmos_endpoint': 'https://test.documents.azure.com:443/',
         'azure_storage_account_url': 'https://test.blob.core.windows.net',
         'azure_openai_endpoint': 'https://test.openai.azure.com/',
+        'azure_openai_deployment': 'gpt-4o',
         'azure_openai_api_version': '2024-02-01',
     })
 
@@ -86,6 +102,7 @@ def test_credential_uses_default_in_development(mock_default_cred):
         'cosmos_endpoint': 'https://test.documents.azure.com:443/',
         'azure_storage_account_url': 'https://test.blob.core.windows.net',
         'azure_openai_endpoint': 'https://test.openai.azure.com/',
+        'azure_openai_deployment': 'gpt-4o',
         'azure_openai_api_version': '2024-02-01',
     })
 

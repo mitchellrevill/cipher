@@ -1,5 +1,7 @@
 import axios from "axios";
 import api from "./client";
+import { ENV } from "@/config/env";
+import { useAuthStore } from "@/store";
 
 export type JobStatus = "pending" | "processing" | "complete" | "failed";
 export type SuggestionSource = "ai" | "manual" | "agent";
@@ -72,30 +74,19 @@ export interface AgentChatRequest {
   message: string;
   workspaceId?: string;
   sessionId?: string;
-  previousResponseId?: string;
-}
-
-export type AgentDirectiveType =
-  | "jump_to_page"
-  | "highlight_text"
-  | "focus_suggestion"
-  | "refresh_workspace";
-
-export interface AgentDirective {
-  type: AgentDirectiveType;
-  document_id?: string;
-  page?: number;
-  suggestion_id?: string;
-  rects?: RedactionRect[];
-  workspace_id?: string;
 }
 
 export interface AgentChatResponse {
   session_id: string;
   response: string;
-  response_id: string;
-  directives?: AgentDirective[];
 }
+
+export type AgentStreamEvent =
+  | { type: "session"; session_id: string }
+  | { type: "text_delta"; delta: string }
+  | { type: "tool_start" | "tool_result" | "tool_error"; tool_name: string; summary?: string }
+  | { type: "done"; response: string; session_id: string }
+  | { type: "error"; error: string };
 
 export interface WorkspaceRule {
   id: string;
@@ -244,16 +235,129 @@ class RedactionJobService {
 }
 
 class RedactionAgentService {
-  async chat({ jobId, message, workspaceId, sessionId, previousResponseId }: AgentChatRequest): Promise<AgentChatResponse> {
+  async chat({ jobId, message, workspaceId, sessionId }: AgentChatRequest): Promise<AgentChatResponse> {
     const response = await api.post<AgentChatResponse>("/api/agent/chat", {
       job_id: jobId,
       message,
       workspace_id: workspaceId,
       session_id: sessionId,
-      previous_response_id: previousResponseId,
     });
 
     return response.data;
+  }
+
+  async streamChat(
+    { jobId, message, workspaceId, sessionId }: AgentChatRequest,
+    handlers: {
+      onEvent?: (event: AgentStreamEvent) => void;
+      signal?: AbortSignal;
+    } = {}
+  ): Promise<void> {
+    const token = useAuthStore.getState().token;
+    const url = new URL("/api/agent/chat/stream", ENV.BACKEND_URL).toString();
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        job_id: jobId,
+        message,
+        workspace_id: workspaceId,
+        session_id: sessionId,
+      }),
+      signal: handlers.signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Streaming chat failed with status ${response.status}`);
+    }
+
+    if (!response.body) {
+      throw new Error("Streaming response body was empty.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    const processEventChunk = (chunk: string) => {
+      const lines = chunk.split(/\r?\n/);
+      let eventName = "message";
+      const dataLines: string[] = [];
+
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          eventName = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          dataLines.push(line.slice(5).trim());
+        }
+      }
+
+      if (dataLines.length === 0) {
+        return;
+      }
+
+      const payload = JSON.parse(dataLines.join("\n")) as Record<string, unknown>;
+      const normalizedType = (typeof payload.type === "string" ? payload.type : eventName) as AgentStreamEvent["type"];
+
+      switch (normalizedType) {
+        case "session":
+          if (typeof payload.session_id === "string") {
+            handlers.onEvent?.({ type: "session", session_id: payload.session_id });
+          }
+          break;
+        case "text_delta":
+          if (typeof payload.delta === "string") {
+            handlers.onEvent?.({ type: "text_delta", delta: payload.delta });
+          }
+          break;
+        case "tool_start":
+        case "tool_result":
+        case "tool_error":
+          if (typeof payload.tool_name === "string") {
+            handlers.onEvent?.({
+              type: normalizedType,
+              tool_name: payload.tool_name,
+              summary: typeof payload.summary === "string" ? payload.summary : undefined,
+            });
+          }
+          break;
+        case "done":
+          if (typeof payload.response === "string" && typeof payload.session_id === "string") {
+            handlers.onEvent?.({ type: "done", response: payload.response, session_id: payload.session_id });
+          }
+          break;
+        case "error":
+          if (typeof payload.error === "string") {
+            handlers.onEvent?.({ type: "error", error: payload.error });
+          }
+          break;
+      }
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+      const chunks = buffer.split(/\r?\n\r?\n/);
+      buffer = chunks.pop() ?? "";
+
+      for (const chunk of chunks) {
+        if (chunk.trim()) {
+          processEventChunk(chunk);
+        }
+      }
+
+      if (done) {
+        if (buffer.trim()) {
+          processEventChunk(buffer);
+        }
+        break;
+      }
+    }
   }
 }
 

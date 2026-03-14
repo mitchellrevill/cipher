@@ -133,6 +133,56 @@ async def test_add_manual_suggestion(redaction_service_with_blob, mock_blob_clie
 
 
 @pytest.mark.asyncio
+async def test_add_suggestions_appends_unique_items(redaction_service_with_blob, mock_blob_client):
+    existing = Suggestion(
+        id="sugg-existing",
+        job_id="job-1",
+        text="GP",
+        category="Custom",
+        reasoning="Existing",
+        context="",
+        page_num=0,
+        rects=[RedactionRect(x0=10, y0=10, x1=20, y1=20)],
+        approved=True,
+        source="agent",
+        created_at=datetime.utcnow(),
+    )
+    duplicate = Suggestion(
+        id="sugg-duplicate",
+        job_id="job-1",
+        text="GP",
+        category="Custom",
+        reasoning="Duplicate",
+        context="",
+        page_num=0,
+        rects=[RedactionRect(x0=10, y0=10, x1=20, y1=20)],
+        approved=True,
+        source="agent",
+        created_at=datetime.utcnow(),
+    )
+    new_item = Suggestion(
+        id="sugg-new",
+        job_id="job-1",
+        text="GP",
+        category="Custom",
+        reasoning="New",
+        context="",
+        page_num=0,
+        rects=[RedactionRect(x0=30, y0=10, x1=40, y1=20)],
+        approved=True,
+        source="agent",
+        created_at=datetime.utcnow(),
+    )
+    mock_blob_client.load_suggestions.return_value = [existing]
+
+    added = await redaction_service_with_blob.add_suggestions("job-1", [duplicate, new_item])
+
+    assert added == 1
+    saved = mock_blob_client.save_suggestions.await_args.args[1]
+    assert len(saved) == 2
+
+
+@pytest.mark.asyncio
 async def test_delete_suggestion(redaction_service_with_blob, mock_blob_client):
     """Verify deleting a suggestion from blob-backed suggestion storage."""
     suggestion = Suggestion(

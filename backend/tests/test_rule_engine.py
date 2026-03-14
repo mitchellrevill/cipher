@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+import fitz
 
 from redactor.models import RedactionRect, Suggestion
 from redactor.services.rule_engine import RuleEngine
@@ -63,3 +64,35 @@ async def test_apply_rule_bulk_approves_matches():
     assert result["applied_count"] == 1
     assert result["affected_docs"][0]["document_id"] == "doc-1"
     redaction_service.bulk_update_approvals.assert_awaited_once_with("doc-1", True, suggestion_ids=["s1"])
+
+
+def _sample_searchable_pdf_bytes(text: str) -> bytes:
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 72), text, fontsize=12)
+    try:
+        return doc.write()
+    finally:
+        doc.close()
+
+
+@pytest.mark.asyncio
+async def test_apply_rule_creates_agent_suggestions_from_page_text():
+    engine = RuleEngine()
+    pdf_bytes = _sample_searchable_pdf_bytes("GP appears twice. Another GP appears here.")
+    blob_client = AsyncMock()
+    blob_client.download_original_pdf.return_value = pdf_bytes
+    redaction_service = AsyncMock()
+    redaction_service.blob_client = blob_client
+    redaction_service.bulk_update_approvals.return_value = 0
+    redaction_service.add_suggestions.return_value = 2
+    rule = {"id": "rule-gp", "pattern": r"\bgp\b", "category": "Custom"}
+    jobs_by_id = {
+        "doc-1": SimpleNamespace(suggestions=[]),
+    }
+
+    result = await engine.apply_rule(rule, jobs_by_id, redaction_service=redaction_service)
+
+    assert result["applied_count"] == 2
+    assert result["affected_docs"][0]["created_count"] == 2
+    redaction_service.add_suggestions.assert_awaited_once()

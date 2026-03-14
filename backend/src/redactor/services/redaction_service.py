@@ -121,6 +121,38 @@ class RedactionService:
         # Save all suggestions back to blob storage
         await self.blob_client.save_suggestions(job_id, suggestions)
 
+    async def add_suggestions(self, job_id: str, suggestions_to_add: list[Suggestion]) -> int:
+        """Append new suggestions in one blob read/write, skipping duplicates."""
+        if not self.blob_client:
+            raise Exception("Blob client not available for storing suggestions")
+
+        if not suggestions_to_add:
+            return 0
+
+        try:
+            suggestions = await self.blob_client.load_suggestions(job_id)
+        except Exception:
+            suggestions = []
+
+        existing_keys = {
+            self._dedupe_key(suggestion)
+            for suggestion in suggestions
+        }
+        added = 0
+
+        for suggestion in suggestions_to_add:
+            key = self._dedupe_key(suggestion)
+            if key in existing_keys:
+                continue
+            suggestions.append(suggestion)
+            existing_keys.add(key)
+            added += 1
+
+        if added > 0:
+            await self.blob_client.save_suggestions(job_id, suggestions)
+
+        return added
+
     async def delete_suggestion(self, job_id: str, suggestion_id: str):
         """Delete a suggestion from the blob-backed suggestion set."""
         if not self.blob_client:
@@ -130,3 +162,20 @@ class RedactionService:
         filtered = [suggestion for suggestion in suggestions if suggestion.id != suggestion_id]
         if len(filtered) != len(suggestions):
             await self.blob_client.save_suggestions(job_id, filtered)
+
+    def _dedupe_key(self, suggestion: Suggestion) -> tuple:
+        rect_key = tuple(
+            (
+                round(rect.x0, 3),
+                round(rect.y0, 3),
+                round(rect.x1, 3),
+                round(rect.y1, 3),
+            )
+            for rect in suggestion.rects
+        )
+        return (
+            suggestion.page_num,
+            suggestion.category.lower(),
+            suggestion.text.strip().lower(),
+            rect_key,
+        )

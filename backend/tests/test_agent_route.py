@@ -1,4 +1,5 @@
 """Tests for agent route - service-based architecture."""
+import json
 import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import patch
@@ -15,13 +16,10 @@ async def test_chat_returns_response(mock_agent_service, test_app):
     job = Job(job_id="job-agent", filename="test.pdf", status=JobStatus.COMPLETE)
     mock_agent_service.job_service.get_job.return_value = job
 
-    new_session = {"id": "sess-abc", "job_id": "job-agent", "messages": []}
-    mock_agent_service.create_session.return_value = new_session
+    mock_agent_service.create_session.return_value = "sess-abc"
 
     mock_agent_service.run_turn.return_value = {
         "text": "I found 3 redactions.",
-        "response_id": "resp-abc",
-        "tool_calls": []
     }
 
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
@@ -29,13 +27,11 @@ async def test_chat_returns_response(mock_agent_service, test_app):
             "job_id": "job-agent",
             "message": "What has been redacted?",
             "session_id": None,
-            "previous_response_id": None
         })
 
     assert response.status_code == 200
     data = response.json()
     assert "response" in data
-    assert "response_id" in data
     assert "session_id" in data
 
 
@@ -49,7 +45,34 @@ async def test_chat_returns_404_for_unknown_job(mock_agent_service, test_app):
             "job_id": "nonexistent",
             "message": "hello",
             "session_id": None,
-            "previous_response_id": None
         })
 
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_returns_sse_events(mock_agent_service, test_app):
+    job = Job(job_id="job-agent", filename="test.pdf", status=JobStatus.COMPLETE)
+    mock_agent_service.job_service.get_job.return_value = job
+    mock_agent_service.create_session.return_value = "sess-stream"
+
+    async def fake_stream(**kwargs):
+        yield {"type": "session", "session_id": "sess-stream"}
+        yield {"type": "text_delta", "delta": "Hello"}
+        yield {"type": "tool_start", "tool_name": "search_document"}
+        yield {"type": "tool_result", "tool_name": "search_document", "summary": "Found 2 results"}
+        yield {"type": "done", "response": "Hello", "session_id": "sess-stream"}
+
+    mock_agent_service.run_turn_stream = fake_stream
+
+    async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+        response = await client.post("/api/agent/chat/stream", json={
+            "job_id": "job-agent",
+            "message": "Stream this",
+            "session_id": None,
+        })
+
+    assert response.status_code == 200
+    assert "event: session" in response.text
+    assert "event: tool_start" in response.text
+    assert json.dumps({"type": "done", "response": "Hello", "session_id": "sess-stream"}) in response.text

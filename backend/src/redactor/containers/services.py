@@ -1,6 +1,7 @@
 """Service layer dependency injection container."""
 
 from dependency_injector import containers, providers
+from redactor.agent.knowledge_base import KnowledgeBase
 from redactor.services.job_service import JobService
 from redactor.services.redaction_service import RedactionService
 from redactor.services.agent_service import AgentService
@@ -194,12 +195,15 @@ def _create_rule_engine():
     return RuleEngine()
 
 
-def _create_agent_service_with_workspace(oai_client, job_service, workspace_service):
+def _create_agent_service_with_workspace(oai_client, job_service, workspace_service, redaction_service, rule_engine, knowledge_base):
     """Factory function to create AgentService with workspace support."""
     return AgentService(
         oai_client=oai_client,
         job_service=job_service,
         workspace_service=workspace_service,
+        redaction_service=redaction_service,
+        rule_engine=rule_engine,
+        knowledge_base=knowledge_base,
     )
 
 
@@ -233,6 +237,11 @@ class ServicesContainer(containers.DeclarativeContainer):
         cosmos_client=providers.Callable(_safe_get_cosmos_account, clients)
     )
 
+    knowledge_base = providers.Singleton(
+        KnowledgeBase,
+        workspace_service=workspace_service,
+    )
+
     rule_engine = providers.Factory(_create_rule_engine)
 
     agent_service = providers.Factory(
@@ -240,4 +249,7 @@ class ServicesContainer(containers.DeclarativeContainer):
         oai_client=providers.Callable(lambda c: c.clients.oai_client(), clients),
         job_service=job_service,
         workspace_service=workspace_service,
+        redaction_service=redaction_service,
+        rule_engine=rule_engine,
+        knowledge_base=knowledge_base,
     )

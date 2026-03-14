@@ -3,8 +3,7 @@ from typing import Optional
 from dependency_injector import containers, providers
 from azure.identity import ManagedIdentityCredential, DefaultAzureCredential
 from azure.cosmos import CosmosClient
-from azure.storage.blob import BlobServiceClient
-from openai import AsyncAzureOpenAI
+from agent_framework.azure import AzureOpenAIResponsesClient
 import os
 
 AZURE_ENV_PRODUCTION = 'production'
@@ -45,19 +44,33 @@ def _validate_and_create_blob(
     return get_blob_storage(account_url, "redacted-jobs", account_key=account_key)
 
 
-def _validate_and_create_oai(azure_endpoint: Optional[str], api_key: Optional[str], api_version: Optional[str]) -> AsyncAzureOpenAI:
-    """Validate and create Azure OpenAI client."""
+def _validate_and_create_oai(
+    azure_endpoint: Optional[str],
+    deployment_name: Optional[str],
+    api_key: Optional[str],
+    api_version: Optional[str],
+    credential,
+) -> AzureOpenAIResponsesClient:
+    """Validate and create Azure OpenAI Agent Framework client."""
     if not azure_endpoint:
         raise ValueError("Azure OpenAI endpoint required but not set in config")
-    if not api_key:
-        raise ValueError("Azure OpenAI API key required but not set in config")
+    if not deployment_name:
+        raise ValueError("Azure OpenAI deployment required but not set in config")
     if not api_version:
         raise ValueError("Azure OpenAI API version required but not set in config")
-    return AsyncAzureOpenAI(
-        api_key=api_key,
-        azure_endpoint=azure_endpoint,
-        api_version=api_version
-    )
+
+    kwargs = {
+        "endpoint": azure_endpoint,
+        "deployment_name": deployment_name,
+        "api_version": api_version,
+    }
+
+    if api_key:
+        kwargs["api_key"] = api_key
+    else:
+        kwargs["credential"] = credential
+
+    return AzureOpenAIResponsesClient(**kwargs)
 
 
 class ClientsSubcontainer(containers.DeclarativeContainer):
@@ -83,8 +96,10 @@ class ClientsSubcontainer(containers.DeclarativeContainer):
     oai_client = providers.Singleton(
         _validate_and_create_oai,
         azure_endpoint=config.azure_openai_endpoint,
+        deployment_name=config.azure_openai_deployment,
         api_key=config.azure_openai_key,
-        api_version=config.azure_openai_api_version
+        api_version=config.azure_openai_api_version,
+        credential=credential,
     )
 
 

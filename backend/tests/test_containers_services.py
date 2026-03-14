@@ -15,8 +15,15 @@ def test_config():
         'cosmos_endpoint': 'https://test.documents.azure.com:443/',
         'azure_storage_account_url': 'https://test.blob.core.windows.net',
         'azure_openai_endpoint': 'https://test.openai.azure.com/',
+        'azure_openai_deployment': 'gpt-4o',
         'azure_openai_api_version': '2024-02-01',
     }
+
+
+def make_mock_oai():
+    client = MagicMock()
+    client.as_agent = MagicMock(return_value=MagicMock(create_session=MagicMock(), run=AsyncMock()))
+    return client
 
 def test_services_container_creates_factories(test_config):
     """Verify container creates service factories (not singletons)."""
@@ -26,7 +33,7 @@ def test_services_container_creates_factories(test_config):
 
     mock_cosmos = AsyncMock()
     mock_blob = AsyncMock()
-    mock_oai = AsyncMock()
+    mock_oai = make_mock_oai()
 
     clients_container.clients.cosmos_client.override(
         providers.Singleton(lambda: mock_cosmos)
@@ -61,7 +68,7 @@ def test_redaction_service_factory(test_config):
         providers.Singleton(lambda: AsyncMock())
     )
     clients_container.clients.oai_client.override(
-        providers.Singleton(lambda: AsyncMock())
+        providers.Singleton(make_mock_oai)
     )
 
     services_container = ServicesContainer()
@@ -82,7 +89,7 @@ def test_agent_service_receives_job_service(test_config):
     clients_container.clients.blob_client.override(
         providers.Singleton(lambda: AsyncMock())
     )
-    mock_oai = AsyncMock()
+    mock_oai = make_mock_oai()
     clients_container.clients.oai_client.override(
         providers.Singleton(lambda: mock_oai)
     )
@@ -94,6 +101,7 @@ def test_agent_service_receives_job_service(test_config):
     assert isinstance(agent, AgentService)
     assert isinstance(agent.job_service, JobService)
     assert isinstance(agent.workspace_service, WorkspaceService)
+    assert agent.knowledge_base is not None
     assert agent.oai_client is mock_oai
 
 
@@ -109,7 +117,7 @@ def test_workspace_service_factory(test_config):
         providers.Singleton(lambda: AsyncMock())
     )
     clients_container.clients.oai_client.override(
-        providers.Singleton(lambda: AsyncMock())
+        providers.Singleton(make_mock_oai)
     )
 
     services_container = ServicesContainer()

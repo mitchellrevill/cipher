@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +8,14 @@ from redactor.containers.app import AppContainer
 from redactor.routes import jobs, redactions, agent, workspaces
 
 logger = logging.getLogger(__name__)
+
+
+def _asyncio_exception_handler(loop, context):
+    """Suppress benign SSL shutdown timeout warnings from Azure SDK (aiohttp transport)."""
+    exc = context.get("exception")
+    if exc is not None and "SSL shutdown timed out" in str(exc):
+        return
+    loop.default_exception_handler(context)
 
 
 @asynccontextmanager
@@ -23,6 +32,7 @@ async def lifespan(app: FastAPI):
     - Close all client connections gracefully
     """
     # ─── STARTUP ───
+    asyncio.get_event_loop().set_exception_handler(_asyncio_exception_handler)
     logger.info("Initializing dependency container...")
 
     try:
@@ -45,6 +55,7 @@ async def lifespan(app: FastAPI):
             'azure_openai_endpoint': settings.azure_openai_endpoint,
             'azure_openai_key': settings.azure_openai_key,
             'azure_openai_api_version': settings.azure_openai_api_version,
+            'azure_openai_deployment': settings.azure_openai_deployment,
         })
 
         # Initialize singleton clients (from clients subcontainer)

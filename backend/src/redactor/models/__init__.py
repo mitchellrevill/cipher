@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from enum import Enum
-from typing import Literal, Optional, List
+from typing import Literal, Optional
 from datetime import datetime
 from redactor.models.workspace import Workspace, WorkspaceRule, WorkspaceExclusion
 
@@ -46,23 +46,6 @@ class Job(BaseModel):
     instructions: Optional[str] = None
     workspace_id: Optional[str] = None
 
-class ChatMessage(BaseModel):
-    role: str  # "user" or "assistant"
-    text: str
-    timestamp: datetime
-
-class ChatSession(BaseModel):
-    id: str
-    job_id: str
-    created_at: datetime
-    last_response_id: Optional[str] = None
-    messages: List[ChatMessage] = []
-
-class AgentSession(BaseModel):
-    session_id: str
-    job_id: str
-    previous_response_id: Optional[str] = None
-
 # New streaming models
 from redactor.models.streaming import (
     PageProcessingStage,
@@ -76,9 +59,6 @@ __all__ = [
     "RedactionRect",
     "Suggestion",
     "Job",
-    "ChatMessage",
-    "ChatSession",
-    "AgentSession",
     "Workspace",
     "WorkspaceRule",
     "WorkspaceExclusion",

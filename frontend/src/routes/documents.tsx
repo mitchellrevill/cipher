@@ -24,11 +24,16 @@ import {
   redactionAgentService,
   redactionJobService,
   workspaceService,
-  type AgentDirective,
+  type AgentStreamEvent,
   type RedactionJob,
   type Suggestion,
   type WorkspaceDocumentState,
 } from "@/api/services";
+import {
+  AgentChatPanel,
+  type AgentConversationState,
+  type AgentToolEvent,
+} from "@/components/chat/agent-chat-panel";
 import { PdfDocumentViewer } from "@/components/pdf/pdf-document-viewer";
 import { SearchToolbar } from "@/components/search/SearchToolbar";
 import {
@@ -72,18 +77,7 @@ import {
 import { cn, formatBytes } from "@/lib/utils";
 import { useUIStore } from "@/store";
 
-interface ChatMessage {
-  role: "user" | "assistant";
-  text: string;
-}
-
-interface ConversationState {
-  messages: ChatMessage[];
-  sessionId?: string;
-  responseId?: string;
-}
-
-const EMPTY_CONVERSATION: ConversationState = { messages: [] };
+const EMPTY_CONVERSATION: AgentConversationState = { messages: [] };
 
 const AGENT_PROMPT_PRESETS = [
   "Search this document for names, emails, and phone numbers I may have missed.",
@@ -138,7 +132,8 @@ export default function DocumentsRoute() {
   );
   const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
-  const [chatByJob, setChatByJob] = useState<Record<string, ConversationState>>({});
+  const [chatByJob, setChatByJob] = useState<Record<string, AgentConversationState>>({});
+  const [streamingJobId, setStreamingJobId] = useState<string | null>(null);
   const [redactedPreviewUrls, setRedactedPreviewUrls] = useState<Record<string, string>>({});
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
@@ -153,6 +148,7 @@ export default function DocumentsRoute() {
   const [focusPageRequest, setFocusPageRequest] = useState<{ pageNumber: number; requestId: number } | null>(null);
   const redactedPreviewUrlsRef = useRef<Record<string, string>>({});
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -162,6 +158,7 @@ export default function DocumentsRoute() {
   useEffect(() => {
     return () => {
       Object.values(redactedPreviewUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
+      chatAbortRef.current?.abort();
     };
   }, []);
 
@@ -343,7 +340,35 @@ export default function DocumentsRoute() {
 
   const canDraw = viewerMode === "original" && !!localPdfUrl && !!selectedJobId;
   const conversation = selectedJobId ? chatByJob[selectedJobId] ?? EMPTY_CONVERSATION : EMPTY_CONVERSATION;
+  const isChatStreaming = selectedJobId !== null && streamingJobId === selectedJobId;
   const isReviewMode = !!selectedJobId;
+
+  const updateConversation = useCallback(
+    (jobId: string, updater: (current: AgentConversationState) => AgentConversationState) => {
+      setChatByJob((current) => ({
+        ...current,
+        [jobId]: updater(current[jobId] ?? EMPTY_CONVERSATION),
+      }));
+    },
+    []
+  );
+
+  const appendToolEvent = useCallback(
+    (jobId: string, assistantMessageId: string, event: AgentToolEvent) => {
+      updateConversation(jobId, (current) => ({
+        ...current,
+        messages: current.messages.map((message) =>
+          message.id === assistantMessageId
+            ? {
+                ...message,
+                toolEvents: [...(message.toolEvents ?? []), event],
+              }
+            : message
+        ),
+      }));
+    },
+    [updateConversation]
+  );
 
   const getSuggestionViewerPageNumber = useCallback(
     (suggestion: Suggestion | null) => {
@@ -664,41 +689,6 @@ export default function DocumentsRoute() {
     onError: (error) => toast.error(getApiErrorMessage(error, "Unable to apply redactions.")),
   });
 
-  const chatMutation = useMutation({
-    mutationFn: async (message: string) => {
-      if (!selectedJobId) throw new Error("Select a job first.");
-      const existing = chatByJob[selectedJobId] ?? EMPTY_CONVERSATION;
-      return redactionAgentService.chat({
-        jobId: selectedJobId,
-        message,
-        workspaceId: selectedWorkspaceId ?? undefined,
-        sessionId: existing.sessionId,
-        previousResponseId: existing.responseId,
-      });
-    },
-    onSuccess: (response, message) => {
-      if (!selectedJobId) return;
-      setChatByJob((cur) => {
-        const existing = cur[selectedJobId] ?? EMPTY_CONVERSATION;
-        return {
-          ...cur,
-          [selectedJobId]: {
-            sessionId: response.session_id,
-            responseId: response.response_id,
-            messages: [
-              ...existing.messages,
-              { role: "user", text: message },
-              { role: "assistant", text: response.response },
-            ],
-          },
-        };
-      });
-      handleAgentDirectives(response.directives);
-      setChatInput("");
-    },
-    onError: (error) => toast.error(getApiErrorMessage(error, "Assistant could not respond.")),
-  });
-
   const handleSelectJob = (jobId: string) => {
     setActiveJobId(jobId);
     startTransition(() => setSelectedJobId(jobId));
@@ -707,38 +697,6 @@ export default function DocumentsRoute() {
     setSelectedSuggestionId(null);
     setSidebarOpen(false);
   };
-
-  const handleAgentDirectives = useCallback(
-    (directives?: AgentDirective[]) => {
-      if (!directives || directives.length === 0) {
-        return;
-      }
-
-      directives.forEach((directive) => {
-        const isCurrentDocument = !directive.document_id || directive.document_id === selectedJobId;
-
-        if (directive.document_id && directive.document_id !== selectedJobId) {
-          const matchingRecentJob = recentJobs.find((job) => job.jobId === directive.document_id);
-          if (matchingRecentJob) {
-            handleSelectJob(directive.document_id);
-          }
-        }
-
-        if (directive.type === "jump_to_page" && directive.page && isCurrentDocument) {
-          requestPageFocus(directive.page);
-        }
-
-        if ((directive.type === "focus_suggestion" || directive.type === "highlight_text") && directive.suggestion_id && isCurrentDocument) {
-          setSelectedSuggestionId(directive.suggestion_id);
-        }
-
-        if (directive.type === "refresh_workspace") {
-          refreshWorkspaceQueries(directive.workspace_id ?? selectedWorkspaceId);
-        }
-      });
-    },
-    [recentJobs, refreshWorkspaceQueries, requestPageFocus, selectedJobId, selectedWorkspaceId]
-  );
 
   const handleFileDrop = useCallback((file: File) => {
     if (file.type !== "application/pdf") {
@@ -794,11 +752,170 @@ export default function DocumentsRoute() {
     }
   };
 
-  const handleChatSubmit = () => {
+  const handleChatSubmit = useCallback(() => {
     const trimmed = chatInput.trim();
-    if (!trimmed || !selectedJobId || chatMutation.isPending) return;
-    void chatMutation.mutateAsync(trimmed);
-  };
+    if (!trimmed || !selectedJobId || isChatStreaming) return;
+
+    const jobId = selectedJobId;
+    const message = trimmed;
+    const assistantMessageId = `assistant-${Date.now()}`;
+    const userMessageId = `user-${Date.now()}`;
+    const existingConversation = chatByJob[jobId] ?? EMPTY_CONVERSATION;
+
+    setChatInput("");
+    setStreamingJobId(jobId);
+    chatAbortRef.current?.abort();
+    const controller = new AbortController();
+    chatAbortRef.current = controller;
+
+    updateConversation(jobId, (current) => ({
+      ...current,
+      messages: [
+        ...current.messages,
+        { id: userMessageId, role: "user", text: message },
+        { id: assistantMessageId, role: "assistant", text: "", status: "streaming", toolEvents: [] },
+      ],
+    }));
+
+    const handleStreamEvent = (event: AgentStreamEvent) => {
+      switch (event.type) {
+        case "session":
+          updateConversation(jobId, (current) => ({ ...current, sessionId: event.session_id }));
+          break;
+        case "text_delta":
+          updateConversation(jobId, (current) => ({
+            ...current,
+            messages: current.messages.map((chatMessage) =>
+              chatMessage.id === assistantMessageId
+                ? { ...chatMessage, text: `${chatMessage.text}${event.delta}`, status: "streaming" }
+                : chatMessage
+            ),
+          }));
+          break;
+        case "tool_start":
+          appendToolEvent(jobId, assistantMessageId, {
+            id: `tool_start-${event.tool_name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            type: "tool_start",
+            toolName: event.tool_name,
+            summary: event.summary,
+          });
+          break;
+        case "tool_result":
+        case "tool_error": {
+          // Transition the most recent matching tool_start card rather than adding a new one
+          const terminalType = event.type;
+          updateConversation(jobId, (current) => ({
+            ...current,
+            messages: current.messages.map((chatMessage) => {
+              if (chatMessage.id !== assistantMessageId) return chatMessage;
+              const toolEvents = chatMessage.toolEvents ?? [];
+              const reversedIdx = [...toolEvents]
+                .reverse()
+                .findIndex((e) => e.type === "tool_start" && e.toolName === event.tool_name);
+              const startIdx = reversedIdx === -1 ? -1 : toolEvents.length - 1 - reversedIdx;
+              if (startIdx === -1) {
+                return {
+                  ...chatMessage,
+                  toolEvents: [
+                    ...toolEvents,
+                    {
+                      id: `${terminalType}-${event.tool_name}-${Date.now()}`,
+                      type: terminalType,
+                      toolName: event.tool_name,
+                      summary: event.summary,
+                    },
+                  ],
+                };
+              }
+              return {
+                ...chatMessage,
+                toolEvents: toolEvents.map((e, i) =>
+                  i === startIdx
+                    ? { ...e, type: terminalType, summary: event.summary }
+                    : e
+                ),
+              };
+            }),
+          }));
+          break;
+        }
+        case "done":
+          updateConversation(jobId, (current) => ({
+            ...current,
+            sessionId: event.session_id,
+            messages: current.messages.map((chatMessage) =>
+              chatMessage.id === assistantMessageId
+                ? {
+                    ...chatMessage,
+                    text: chatMessage.text || event.response,
+                    status: "done",
+                  }
+                : chatMessage
+            ),
+          }));
+          // Refresh job suggestions + workspace state so agent-created rules/suggestions appear immediately
+          void queryClient.invalidateQueries({ queryKey: ["redaction-job", jobId] });
+          if (selectedWorkspaceId) {
+            void queryClient.invalidateQueries({ queryKey: ["workspace", selectedWorkspaceId] });
+            void queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+          }
+          break;
+        case "error":
+          updateConversation(jobId, (current) => ({
+            ...current,
+            messages: current.messages.map((chatMessage) =>
+              chatMessage.id === assistantMessageId
+                ? {
+                    ...chatMessage,
+                    text: chatMessage.text || event.error,
+                    status: "error",
+                  }
+                : chatMessage
+            ),
+          }));
+          break;
+      }
+    };
+
+    void redactionAgentService
+      .streamChat(
+        {
+          jobId,
+          message,
+          workspaceId: selectedWorkspaceId ?? undefined,
+          sessionId: existingConversation.sessionId,
+        },
+        {
+          signal: controller.signal,
+          onEvent: handleStreamEvent,
+        }
+      )
+      .catch((error) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        updateConversation(jobId, (current) => ({
+          ...current,
+          messages: current.messages.map((chatMessage) =>
+            chatMessage.id === assistantMessageId
+              ? {
+                  ...chatMessage,
+                  text: chatMessage.text || getApiErrorMessage(error, "Assistant could not respond."),
+                  status: "error",
+                }
+              : chatMessage
+          ),
+        }));
+        toast.error(getApiErrorMessage(error, "Assistant could not respond."));
+      })
+      .finally(() => {
+        setStreamingJobId((current) => (current === jobId ? null : current));
+        if (chatAbortRef.current === controller) {
+          chatAbortRef.current = null;
+        }
+      });
+  }, [appendToolEvent, chatByJob, chatInput, isChatStreaming, selectedJobId, selectedWorkspaceId, updateConversation]);
 
   const handleQuickPrompt = (prompt: string) => {
     setChatInput(prompt);
@@ -1556,43 +1673,14 @@ export default function DocumentsRoute() {
             )}
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3">
-            {conversation.messages.length === 0 ? (
-              <div className="space-y-3">
-                <div className="rounded-xl border border-border/60 bg-muted/20 p-3 text-sm text-muted-foreground">
-                  Ask the assistant to search, explain redactions, or jump to a page. It can output{" "}
-                  <code className="font-mono opacity-70">{"[[page:N]]"}</code> tokens to navigate directly.
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {AGENT_PROMPT_PRESETS.map((prompt) => (
-                    <button
-                      key={prompt}
-                      type="button"
-                      onClick={() => handleQuickPrompt(prompt)}
-                      className="rounded-full border border-border/60 px-2.5 py-1.5 text-left text-[11px] leading-4 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              conversation.messages.map((msg, i) => (
-                <div
-                  key={`${msg.role}-${i}`}
-                  className={cn(
-                    "rounded-2xl px-3.5 py-3 text-sm leading-relaxed",
-                    msg.role === "assistant"
-                      ? "mr-10 border border-border/60 bg-muted/40 text-foreground"
-                      : "ml-12 bg-primary text-primary-foreground"
-                  )}
-                >
-                  {renderMessageWithPageTokens(msg.text)}
-                </div>
-              ))
-            )}
-            <div ref={chatEndRef} />
-          </div>
+          <AgentChatPanel
+            conversation={conversation}
+            promptPresets={AGENT_PROMPT_PRESETS}
+            isStreaming={isChatStreaming}
+            onQuickPrompt={handleQuickPrompt}
+            renderMessageText={renderMessageWithPageTokens}
+          />
+          <div ref={chatEndRef} />
           <div className="flex-shrink-0 border-t border-border/60 px-4 py-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
@@ -1681,8 +1769,8 @@ export default function DocumentsRoute() {
               value={chatInput}
               onValueChange={setChatInput}
               onSubmit={handleChatSubmit}
-              isLoading={chatMutation.isPending}
-              disabled={!selectedJobId || chatMutation.isPending}
+              isLoading={isChatStreaming}
+              disabled={!selectedJobId || isChatStreaming}
               className="rounded-xl border-border/70 bg-muted/30"
             >
               <PromptInputTextarea
@@ -1694,15 +1782,15 @@ export default function DocumentsRoute() {
                   <button
                     type="button"
                     onClick={handleChatSubmit}
-                    disabled={!selectedJobId || chatInput.trim().length === 0 || chatMutation.isPending}
+                    disabled={!selectedJobId || chatInput.trim().length === 0 || isChatStreaming}
                     className={cn(
                       "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
-                      chatInput.trim().length > 0 && selectedJobId && !chatMutation.isPending
+                      chatInput.trim().length > 0 && selectedJobId && !isChatStreaming
                         ? "bg-primary text-primary-foreground hover:bg-primary/90"
                         : "bg-muted text-muted-foreground cursor-not-allowed"
                     )}
                   >
-                    {chatMutation.isPending ? (
+                    {isChatStreaming ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <Send className="h-4 w-4" />

@@ -48,7 +48,12 @@ def mock_blob_client():
 @pytest.fixture
 def mock_oai_client():
     """Create a mock Azure OpenAI client for service tests."""
-    return AsyncMock()
+    client = MagicMock()
+    agent = MagicMock()
+    agent.create_session = MagicMock(return_value=MagicMock(session_id="sess-default"))
+    agent.run = AsyncMock(return_value=MagicMock(text="mock response"))
+    client.as_agent = MagicMock(return_value=agent)
+    return client
 
 
 @pytest.fixture
@@ -80,8 +85,8 @@ def mock_agent_service(mock_job_service):
     service = MagicMock(spec=AgentService)
     service.create_session = AsyncMock()
     service.get_session = AsyncMock()
-    service.save_message = AsyncMock()
     service.run_turn = AsyncMock()
+    service.run_turn_stream = MagicMock()
     service.job_service = mock_job_service
     return service
 

@@ -89,3 +89,5 @@ export const useUIStore = create<UIState>()(
     { name: "ui-store" }
   )
 );
+
+export { useWorkspaceStore, type ChatContextFile } from "./workspace-store";

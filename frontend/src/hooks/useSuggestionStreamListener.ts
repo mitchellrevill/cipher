@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Suggestion } from "@/api/services";
+import { ENV } from "@/config/env";
 
 interface StreamSuggestion {
   id: string;
@@ -96,7 +97,7 @@ export function useSuggestionStreamListener(
       return;
     }
 
-    const eventSource = new EventSource(`/api/jobs/${jobId}/stream-analysis`);
+    const eventSource = new EventSource(`${ENV.BACKEND_URL}/api/jobs/${jobId}/stream-analysis`);
     eventSourceRef.current = eventSource;
 
     eventSource.addEventListener("page_status", (event: Event) => {

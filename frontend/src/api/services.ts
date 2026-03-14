@@ -387,6 +387,11 @@ class WorkspaceServiceApi {
     return response.data;
   }
 
+  async removeDocument(workspaceId: string, documentId: string): Promise<WorkspaceState> {
+    const response = await api.delete<WorkspaceState>(`/api/workspaces/${workspaceId}/documents/${documentId}`);
+    return response.data;
+  }
+
   async createRule(
     workspaceId: string,
     payload: { pattern: string; category: string; confidenceThreshold?: number; appliesTo?: string[] }

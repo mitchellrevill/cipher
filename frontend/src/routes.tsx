@@ -8,6 +8,7 @@ import RootLayout from "@/routes/RootLayout";
 import IndexRoute from "@/routes/index";
 import LoginRoute from "@/routes/login";
 import DocumentsRoute from "@/routes/documents";
+import WorkspaceDetailsRoute from "@/routes/workspaces.$workspaceId";
 
 const rootRoute = new RootRoute({
   component: RootLayout,
@@ -31,7 +32,13 @@ const documentsRoute = new Route({
   component: DocumentsRoute,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, loginRoute, documentsRoute]);
+const workspaceDetailsRoute = new Route({
+  getParentRoute: () => rootRoute,
+  path: "/workspaces/$workspaceId",
+  component: WorkspaceDetailsRoute,
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, loginRoute, documentsRoute, workspaceDetailsRoute]);
 
 export const router = new Router({ routeTree });
 

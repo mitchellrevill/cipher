@@ -9,7 +9,10 @@ import {
   PanelsTopLeft,
   User,
 } from "lucide-react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { WorkspaceSidebarJobs } from "@/components/workspace/workspace-sidebar-jobs";
+import { useRecentJobs } from "@/hooks/useRecentJobs";
+import { setActiveJobId } from "@/lib/recent-jobs";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Button,
@@ -40,11 +43,11 @@ interface NavSectionConfig {
 
 const PRIMARY_NAV_ITEMS: ReadonlyArray<NavItemConfig> = [
   { id: "overview", icon: House, label: "Overview", to: "/", mobileShortLabel: "Home" },
-  { id: "documents", icon: FileSearch, label: "Workspace", to: "/documents", mobileShortLabel: "Work" },
+  { id: "documents", icon: FileSearch, label: "Workspaces", to: "/documents", mobileShortLabel: "Work" },
 ];
 
 const NAV_SECTIONS: ReadonlyArray<NavSectionConfig> = [
-  { id: "workspace", label: "Workspace", items: PRIMARY_NAV_ITEMS },
+  { id: "workspace", label: "Workspaces", items: PRIMARY_NAV_ITEMS },
 ];
 
 const readStringStorage = (key: string, fallback: string): string => {
@@ -68,11 +71,13 @@ const getUserInitials = (name?: string | null, email?: string | null): string =>
 export function AppShell({ children }: PropsWithChildren) {
   const isOpen = useUIStore((s) => s.sidebarOpen);
   const setIsOpen = useUIStore((s) => s.setSidebarOpen);
+  const { recentJobs, activeJobId } = useRecentJobs();
   const [sidebarLayout, setSidebarLayout] = useState<"left" | "top">(() =>
     readStringStorage(SIDEBAR_LAYOUT_KEY, "left") === "top" ? "top" : "left"
   );
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
@@ -88,6 +93,11 @@ export function AppShell({ children }: PropsWithChildren) {
       window.localStorage.setItem(SIDEBAR_LAYOUT_KEY, next);
       return next;
     });
+  };
+
+  const handleSidebarJobSelect = (jobId: string) => {
+    setActiveJobId(jobId);
+    void navigate({ to: "/documents" });
   };
 
   const renderDesktopLink = (item: NavItemConfig) => {
@@ -223,6 +233,16 @@ export function AppShell({ children }: PropsWithChildren) {
               </React.Fragment>
             ))}
           </nav>
+
+          {sidebarLayout === "left" && isOpen ? (
+            <div className="border-t border-sidebar-border px-2 py-2">
+              <WorkspaceSidebarJobs
+                jobs={recentJobs}
+                selectedJobId={activeJobId}
+                onJobSelect={handleSidebarJobSelect}
+              />
+            </div>
+          ) : null}
 
           {/* Profile area */}
           <div className="flex-shrink-0">

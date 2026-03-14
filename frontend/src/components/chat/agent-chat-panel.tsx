@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useDroppable } from "@dnd-kit/core";
 import {
 	Bot,
 	CheckCircle2,
@@ -8,15 +9,25 @@ import {
 	Loader2,
 	MessageSquareText,
 	Search,
+	Send,
 	ShieldBan,
 	Sparkles,
 	Trash2,
 	User2,
 	WandSparkles,
+	X,
 } from "lucide-react";
 import { Badge } from "@/components/ui";
+
+import {
+	PromptInput,
+	PromptInputAction,
+	PromptInputActions,
+	PromptInputTextarea,
+} from "@/components/ui/prompt-input";
 import { MotionDiv } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { useWorkspaceStore } from "@/store/workspace-store";
 
 export interface AgentToolEvent {
 	id: string;
@@ -42,6 +53,11 @@ interface AgentChatPanelProps {
 	conversation: AgentConversationState;
 	promptPresets: string[];
 	isStreaming: boolean;
+	chatInput: string;
+	onChatInputChange: (value: string) => void;
+	onSubmit: () => void;
+	inputPlaceholder?: string;
+	inputDisabled?: boolean;
 	onQuickPrompt: (prompt: string) => void;
 	renderMessageText: (text: string) => ReactNode;
 }
@@ -136,94 +152,162 @@ export function AgentChatPanel({
 	conversation,
 	promptPresets,
 	isStreaming,
+	chatInput,
+	onChatInputChange,
+	onSubmit,
+	inputPlaceholder = "Ask the assistant…",
+	inputDisabled = false,
 	onQuickPrompt,
 	renderMessageText,
 }: AgentChatPanelProps) {
+	const { chatContextFiles, removeDragContextFile } = useWorkspaceStore();
+	const { isOver, setNodeRef } = useDroppable({ id: "chat-drop-zone" });
+	const canSubmit = chatInput.trim().length > 0 && !inputDisabled && !isStreaming;
+
 	return (
-		<div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
-			<div className="space-y-4">
-				{conversation.messages.length === 0 ? (
-					<EmptyState promptPresets={promptPresets} onQuickPrompt={onQuickPrompt} />
-				) : (
-					conversation.messages.map((message) => {
-						const isAssistant = message.role === "assistant";
+		<div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+			<div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
+				<div className="space-y-4">
+					{conversation.messages.length === 0 ? (
+						<EmptyState promptPresets={promptPresets} onQuickPrompt={onQuickPrompt} />
+					) : (
+						conversation.messages.map((message) => {
+							const isAssistant = message.role === "assistant";
 
-						return (
-							<MotionDiv
-								key={message.id}
-								initial={{ opacity: 0, y: 10 }}
-								animate={{ opacity: 1, y: 0 }}
-								transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-								className={cn("flex gap-3", isAssistant ? "justify-start" : "justify-end")}
-							>
-								{isAssistant ? (
-									<div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
-										<Bot className="h-4 w-4" />
-									</div>
-								) : null}
-
-								<div className={cn("max-w-[88%] space-y-2", isAssistant ? "mr-8" : "ml-8 items-end")}>
-									<div
-										className={cn(
-											"rounded-3xl border px-4 py-3 shadow-sm",
-											isAssistant
-												? "border-border/60 bg-muted/35 text-foreground"
-												: "border-primary/30 bg-primary text-primary-foreground"
-										)}
-									>
-										<div className="mb-2 flex items-center gap-2">
-											<span className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-70">
-												{isAssistant ? "Assistant" : "You"}
-											</span>
-											{isAssistant && message.status === "streaming" ? (
-												<Badge variant="secondary" className="rounded-full border-0 bg-primary/15 text-primary">
-													Live
-												</Badge>
-											) : null}
-											{isAssistant && message.status === "error" ? (
-												<Badge variant="secondary" className="rounded-full border-0 bg-destructive/15 text-destructive">
-													Error
-												</Badge>
-											) : null}
-										</div>
-
-										<div className="whitespace-pre-wrap text-sm leading-relaxed break-words">
-											{message.text ? renderMessageText(message.text) : isAssistant && message.status === "streaming" ? (
-												<span className="inline-flex items-center gap-2 text-muted-foreground">
-													<Loader2 className="h-4 w-4 animate-spin" />
-													Thinking…
-												</span>
-											) : null}
-											{isAssistant && message.status === "streaming" && message.text ? (
-												<span className="ml-1 inline-flex h-4 w-2 translate-y-1 rounded-full bg-primary/60 align-middle animate-pulse" />
-											) : null}
-										</div>
-									</div>
-
-									{isAssistant && message.toolEvents?.length ? (
-										<div className="space-y-2 pl-2">
-											{message.toolEvents.map((event) => (
-												<ToolEventCard key={event.id} event={event} />
-											))}
+							return (
+								<MotionDiv
+									key={message.id}
+									initial={{ opacity: 0, y: 10 }}
+									animate={{ opacity: 1, y: 0 }}
+									transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+									className={cn("flex gap-3", isAssistant ? "justify-start" : "justify-end")}
+								>
+									{isAssistant ? (
+										<div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
+											<Bot className="h-4 w-4" />
 										</div>
 									) : null}
-								</div>
 
-								{!isAssistant ? (
-									<div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-background text-muted-foreground">
-										<User2 className="h-4 w-4" />
+									<div className={cn("max-w-[88%] space-y-2", isAssistant ? "mr-8" : "ml-8 items-end")}>
+										<div
+											className={cn(
+												"rounded-3xl border px-4 py-3 shadow-sm",
+												isAssistant
+													? "border-border/60 bg-muted/35 text-foreground"
+													: "border-primary/30 bg-primary text-primary-foreground"
+											)}
+										>
+											<div className="mb-2 flex items-center gap-2">
+												<span className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-70">
+													{isAssistant ? "Assistant" : "You"}
+												</span>
+												{isAssistant && message.status === "streaming" ? (
+													<Badge variant="secondary" className="rounded-full border-0 bg-primary/15 text-primary">
+														Live
+													</Badge>
+												) : null}
+												{isAssistant && message.status === "error" ? (
+													<Badge variant="secondary" className="rounded-full border-0 bg-destructive/15 text-destructive">
+														Error
+													</Badge>
+												) : null}
+											</div>
+
+											<div className="whitespace-pre-wrap text-sm leading-relaxed break-words">
+												{message.text ? renderMessageText(message.text) : isAssistant && message.status === "streaming" ? (
+													<span className="inline-flex items-center gap-2 text-muted-foreground">
+														<Loader2 className="h-4 w-4 animate-spin" />
+														Thinking…
+													</span>
+												) : null}
+												{isAssistant && message.status === "streaming" && message.text ? (
+													<span className="ml-1 inline-flex h-4 w-2 translate-y-1 rounded-full bg-primary/60 align-middle animate-pulse" />
+												) : null}
+											</div>
+										</div>
+
+										{isAssistant && message.toolEvents?.length ? (
+											<div className="space-y-2 pl-2">
+												{message.toolEvents.map((event) => (
+													<ToolEventCard key={event.id} event={event} />
+												))}
+											</div>
+										) : null}
 									</div>
-								) : null}
-							</MotionDiv>
-						);
-					})
-				)}
 
-				{isStreaming && conversation.messages.length > 0 ? (
-					<div className="pl-11 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-						Streaming agent response…
-					</div>
-				) : null}
+									{!isAssistant ? (
+										<div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-background text-muted-foreground">
+											<User2 className="h-4 w-4" />
+										</div>
+									) : null}
+								</MotionDiv>
+							);
+						})
+					)}
+
+					{isStreaming && conversation.messages.length > 0 ? (
+						<div className="pl-11 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
+							Streaming agent response…
+						</div>
+					) : null}
+				</div>
+			</div>
+
+			{chatContextFiles.length > 0 ? (
+				<div className="flex flex-wrap gap-1.5 border-t border-border/60 px-3 py-2">
+					{chatContextFiles.map((file) => (
+						<div
+							key={file.jobId}
+							className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs text-foreground"
+						>
+							<span>{file.filename}</span>
+							<button
+								type="button"
+								onClick={() => removeDragContextFile(file.jobId)}
+								className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+								aria-label={`Remove ${file.filename}`}
+							>
+								<X className="h-3 w-3" />
+							</button>
+						</div>
+					))}
+				</div>
+			) : null}
+
+			<div
+				ref={setNodeRef}
+				className={cn(
+					"border-t border-border/60 p-3 transition-colors",
+					isOver && "ring-primary bg-accent/20 ring-2 ring-inset"
+				)}
+			>
+				<PromptInput
+					value={chatInput}
+					onValueChange={onChatInputChange}
+					onSubmit={onSubmit}
+					isLoading={isStreaming}
+					disabled={inputDisabled}
+					className="rounded-xl border-border/70 bg-muted/30"
+				>
+					<PromptInputTextarea placeholder={inputPlaceholder} className="min-h-[44px] text-sm" />
+					<PromptInputActions className="justify-end px-1 pb-1">
+						<PromptInputAction tooltip="Send message" side="top">
+							<button
+								type="button"
+								onClick={onSubmit}
+								disabled={!canSubmit}
+								className={cn(
+									"flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+									canSubmit
+										? "bg-primary text-primary-foreground hover:bg-primary/90"
+										: "bg-muted text-muted-foreground cursor-not-allowed"
+								)}
+							>
+								{isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+							</button>
+						</PromptInputAction>
+					</PromptInputActions>
+				</PromptInput>
 			</div>
 		</div>
 	);

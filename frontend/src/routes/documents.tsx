@@ -1,24 +1,19 @@
 import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowUpFromLine,
-  Ban,
   CheckSquare,
   ChevronLeft,
   ChevronRight,
   Download,
-  FilePlus2,
-  FolderKanban,
   Loader2,
   Plus,
-  Send,
   ShieldCheck,
   Sparkles,
-  Trash2,
   WandSparkles,
   X,
 } from "lucide-react";
-import { toast } from "sonner";
 import {
   getApiErrorMessage,
   redactionAgentService,
@@ -36,17 +31,16 @@ import {
 } from "@/components/chat/agent-chat-panel";
 import { PdfDocumentViewer } from "@/components/pdf/pdf-document-viewer";
 import { SearchToolbar } from "@/components/search/SearchToolbar";
+import { AddToWorkspaceDialog } from "@/components/workspace/add-to-workspace-dialog";
+import { CreateWorkspaceDialog } from "@/components/workspace/create-workspace-dialog";
+import { WorkspaceChatHeader } from "@/components/workspace/workspace-chat-header";
+import { WorkspaceExclusionsSlideover } from "@/components/workspace/workspace-exclusions-slideover";
+import { WorkspaceFilesPanel, type PanelFile } from "@/components/workspace/workspace-files-panel";
+import { WorkspaceRulesSlideover } from "@/components/workspace/workspace-rules-slideover";
 import {
   Badge,
   Button,
   Checkbox,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Input,
   Label,
   Select,
   SelectContent,
@@ -55,27 +49,21 @@ import {
   SelectValue,
   Textarea,
 } from "@/components/ui";
-import {
-  PromptInput,
-  PromptInputAction,
-  PromptInputActions,
-  PromptInputTextarea,
-} from "@/components/ui/prompt-input";
 import { usePageProcessingStatus, useSuggestionStreamListener, useRedactionHotkeys } from "@/hooks";
-import { useRecentJobs } from "@/hooks/useRecentJobs";
 import { useFuzzySearch } from "@/hooks/useFuzzySearch";
-import type { TextMatch } from "@/types/search";
+import { useRecentJobs } from "@/hooks/useRecentJobs";
 import { queryClient } from "@/lib/query-client";
 import {
   getLocalPdfUrl,
   registerLocalPdf,
-  removeRecentJob,
   setActiveJobId,
   upsertRecentJob,
   type RecentJobRecord,
 } from "@/lib/recent-jobs";
 import { cn, formatBytes } from "@/lib/utils";
-import { useUIStore } from "@/store";
+import { useUIStore, useWorkspaceStore, type ChatContextFile } from "@/store";
+import type { TextMatch } from "@/types/search";
+import { toast } from "sonner";
 
 const EMPTY_CONVERSATION: AgentConversationState = { messages: [] };
 
@@ -111,6 +99,9 @@ function sortSuggestions(suggestions: Suggestion[]): Suggestion[] {
 export default function DocumentsRoute() {
   const { recentJobs, activeJobId } = useRecentJobs();
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
+  const selectedWorkspaceId = useWorkspaceStore((state) => state.selectedWorkspaceId);
+  const setSelectedWorkspaceId = useWorkspaceStore((state) => state.setSelectedWorkspaceId);
+  const addDragContextFile = useWorkspaceStore((state) => state.addDragContextFile);
 
   const [selectedJobId, setSelectedJobId] = useState<string | null>(
     activeJobId ?? recentJobs[0]?.jobId ?? null
@@ -136,18 +127,12 @@ export default function DocumentsRoute() {
   const [streamingJobId, setStreamingJobId] = useState<string | null>(null);
   const [redactedPreviewUrls, setRedactedPreviewUrls] = useState<Record<string, string>>({});
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
-  const [isCreateWorkspaceOpen, setIsCreateWorkspaceOpen] = useState(false);
-  const [newWorkspaceName, setNewWorkspaceName] = useState("");
-  const [newWorkspaceDescription, setNewWorkspaceDescription] = useState("");
-  const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
-  const [rulePattern, setRulePattern] = useState("");
-  const [ruleCategory, setRuleCategory] = useState("PII");
-  const [isExcludeDialogOpen, setIsExcludeDialogOpen] = useState(false);
-  const [excludeReason, setExcludeReason] = useState("Excluded from workspace automation");
+  const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
+  const [addToWorkspaceOpen, setAddToWorkspaceOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [exclusionsOpen, setExclusionsOpen] = useState(false);
   const [focusPageRequest, setFocusPageRequest] = useState<{ pageNumber: number; requestId: number } | null>(null);
   const redactedPreviewUrlsRef = useRef<Record<string, string>>({});
-  const chatEndRef = useRef<HTMLDivElement>(null);
   const chatAbortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -175,10 +160,6 @@ export default function DocumentsRoute() {
     if (selectedJobId && recentJobs.some((job) => job.jobId === selectedJobId)) return;
     setSelectedJobId(activeJobId ?? recentJobs[0]?.jobId ?? null);
   }, [activeJobId, recentJobs, selectedJobId]);
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatByJob, selectedJobId]);
 
   const selectedRecentJob = useMemo(
     () => recentJobs.find((job) => job.jobId === selectedJobId) ?? null,
@@ -257,14 +238,6 @@ export default function DocumentsRoute() {
 
   const sortedSuggestions = useMemo(() => sortSuggestions(activeJob?.suggestions ?? []), [activeJob?.suggestions]);
   const approvedCount = useMemo(() => sortedSuggestions.filter((s) => s.approved).length, [sortedSuggestions]);
-  const currentWorkspaceDocument = useMemo(
-    () => activeWorkspace?.documents.find((document) => document.id === selectedJobId) ?? null,
-    [activeWorkspace?.documents, selectedJobId]
-  );
-  const currentWorkspaceExclusion = useMemo(
-    () => activeWorkspace?.exclusions.find((exclusion) => exclusion.document_id === selectedJobId) ?? null,
-    [activeWorkspace?.exclusions, selectedJobId]
-  );
   const activeSearchMatch = useMemo(
     () =>
       activeSearchMatchIndex >= 0 && activeSearchMatchIndex < searchMatches.length
@@ -285,9 +258,6 @@ export default function DocumentsRoute() {
   }, [pageCount, sortedSuggestions]);
   const localPdfUrl = selectedJobId ? getLocalPdfUrl(selectedJobId) : null;
   const redactedPreviewUrl = selectedJobId ? redactedPreviewUrls[selectedJobId] : undefined;
-  const workspaceDocumentCount = activeWorkspace?.stats?.document_count ?? activeWorkspace?.documents.length ?? 0;
-  const workspaceRuleCount = activeWorkspace?.stats?.rule_count ?? activeWorkspace?.rules.length ?? 0;
-  const workspaceExclusionCount = activeWorkspace?.stats?.exclusion_count ?? activeWorkspace?.exclusions.length ?? 0;
 
   useEffect(() => {
     if (!searchQuery.trim() || searchMatches.length === 0) {
@@ -491,87 +461,6 @@ export default function DocumentsRoute() {
     onError: (error) => {
       toast.error(getApiErrorMessage(error, "Unable to upload the PDF."));
     },
-  });
-
-  const createWorkspaceMutation = useMutation({
-    mutationFn: async () => workspaceService.createWorkspace(newWorkspaceName.trim(), newWorkspaceDescription.trim() || undefined),
-    onSuccess: (workspace) => {
-      setSelectedWorkspaceId(workspace.id);
-      setIsCreateWorkspaceOpen(false);
-      setNewWorkspaceName("");
-      setNewWorkspaceDescription("");
-      refreshWorkspaceQueries(workspace.id);
-      toast.success(`Workspace ${workspace.name} created.`);
-    },
-    onError: (error) => toast.error(getApiErrorMessage(error, "Unable to create workspace.")),
-  });
-
-  const addDocumentToWorkspaceMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedWorkspaceId || !selectedJobId) {
-        throw new Error("Select a workspace and a job first.");
-      }
-
-      return workspaceService.addDocument(selectedWorkspaceId, selectedJobId);
-    },
-    onSuccess: () => {
-      refreshWorkspaceQueries(selectedWorkspaceId);
-      toast.success("Document added to workspace.");
-    },
-    onError: (error) => toast.error(getApiErrorMessage(error, "Unable to add the document to the workspace.")),
-  });
-
-  const createWorkspaceRuleMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedWorkspaceId) {
-        throw new Error("Select a workspace first.");
-      }
-
-      return workspaceService.createRule(selectedWorkspaceId, {
-        pattern: rulePattern.trim(),
-        category: ruleCategory.trim(),
-      });
-    },
-    onSuccess: (rule) => {
-      setIsRuleDialogOpen(false);
-      setRulePattern("");
-      setRuleCategory("PII");
-      refreshWorkspaceQueries(selectedWorkspaceId);
-      toast.success(`Rule ${rule.id} created.`);
-    },
-    onError: (error) => toast.error(getApiErrorMessage(error, "Unable to create workspace rule.")),
-  });
-
-  const excludeDocumentMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedWorkspaceId || !selectedJobId) {
-        throw new Error("Select a workspace and a job first.");
-      }
-
-      return workspaceService.excludeDocument(selectedWorkspaceId, selectedJobId, excludeReason.trim());
-    },
-    onSuccess: () => {
-      setIsExcludeDialogOpen(false);
-      setExcludeReason("Excluded from workspace automation");
-      refreshWorkspaceQueries(selectedWorkspaceId);
-      toast.success("Document excluded from workspace automation.");
-    },
-    onError: (error) => toast.error(getApiErrorMessage(error, "Unable to exclude this document.")),
-  });
-
-  const removeExclusionMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedWorkspaceId || !currentWorkspaceExclusion) {
-        throw new Error("Select an excluded document first.");
-      }
-
-      return workspaceService.removeExclusion(selectedWorkspaceId, currentWorkspaceExclusion.id);
-    },
-    onSuccess: () => {
-      refreshWorkspaceQueries(selectedWorkspaceId);
-      toast.success("Document restored to workspace automation.");
-    },
-    onError: (error) => toast.error(getApiErrorMessage(error, "Unable to remove the exclusion.")),
   });
 
   const approvalMutation = useMutation({
@@ -964,6 +853,36 @@ export default function DocumentsRoute() {
     [requestPageFocus]
   );
 
+  const workspaceScopedFiles = useMemo<PanelFile[]>(() => {
+    if (activeWorkspace) {
+      return activeWorkspace.documents.map((document) => ({
+        id: document.id,
+        filename: getWorkspaceDocumentLabel(document),
+        status: document.status ?? "complete",
+        workspaceId: activeWorkspace.id,
+      }));
+    }
+
+    return recentJobs.map((job) => ({
+      id: job.jobId,
+      filename: job.filename,
+      status: job.status,
+      workspaceId: undefined,
+    }));
+  }, [activeWorkspace, getWorkspaceDocumentLabel, recentJobs]);
+
+  const handleChatDrop = useCallback(
+    (event: DragEndEvent) => {
+      if (event.over?.id !== "chat-drop-zone" || !event.active.data.current) {
+        return;
+      }
+
+      const { jobId, filename, workspaceId } = event.active.data.current as ChatContextFile;
+      addDragContextFile({ jobId, filename, workspaceId });
+    },
+    [addDragContextFile]
+  );
+
   const handleSuggestionSelect = (suggestion: Suggestion) => {
     setSelectedSuggestionId(suggestion.id);
 
@@ -972,126 +891,6 @@ export default function DocumentsRoute() {
       requestPageFocus(targetPage);
     }
   };
-
-  const workspaceDialogs = (
-    <>
-      <Dialog open={isCreateWorkspaceOpen} onOpenChange={setIsCreateWorkspaceOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create workspace</DialogTitle>
-            <DialogDescription>Group related documents so the assistant can reason across them.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="workspace-name">Name</Label>
-              <Input
-                id="workspace-name"
-                value={newWorkspaceName}
-                onChange={(e) => setNewWorkspaceName(e.target.value)}
-                placeholder="Q1 compliance batch"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="workspace-description">Description</Label>
-              <Textarea
-                id="workspace-description"
-                value={newWorkspaceDescription}
-                onChange={(e) => setNewWorkspaceDescription((e as React.ChangeEvent<HTMLTextAreaElement>).target.value)}
-                placeholder="Optional context for this document set"
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsCreateWorkspaceOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void createWorkspaceMutation.mutateAsync()}
-              disabled={newWorkspaceName.trim().length === 0 || createWorkspaceMutation.isPending}
-            >
-              {createWorkspaceMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-              Create workspace
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isRuleDialogOpen} onOpenChange={setIsRuleDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create workspace rule</DialogTitle>
-            <DialogDescription>Save a reusable pattern that can be applied across non-excluded documents.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="rule-pattern">Pattern</Label>
-              <Input
-                id="rule-pattern"
-                value={rulePattern}
-                onChange={(e) => setRulePattern(e.target.value)}
-                placeholder="\\b\\d{3}-\\d{2}-\\d{4}\\b"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="rule-category">Category</Label>
-              <Input
-                id="rule-category"
-                value={ruleCategory}
-                onChange={(e) => setRuleCategory(e.target.value)}
-                placeholder="PII"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsRuleDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void createWorkspaceRuleMutation.mutateAsync()}
-              disabled={!selectedWorkspaceId || rulePattern.trim().length === 0 || ruleCategory.trim().length === 0 || createWorkspaceRuleMutation.isPending}
-            >
-              {createWorkspaceRuleMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-              Save rule
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isExcludeDialogOpen} onOpenChange={setIsExcludeDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Exclude current document</DialogTitle>
-            <DialogDescription>Excluded documents are skipped when the assistant applies workspace rules.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1.5">
-            <Label htmlFor="exclude-reason">Reason</Label>
-            <Textarea
-              id="exclude-reason"
-              value={excludeReason}
-              onChange={(e) => setExcludeReason((e as React.ChangeEvent<HTMLTextAreaElement>).target.value)}
-              rows={3}
-            />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsExcludeDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void excludeDocumentMutation.mutateAsync()}
-              disabled={!selectedWorkspaceId || !selectedJobId || excludeReason.trim().length === 0 || excludeDocumentMutation.isPending}
-            >
-              {excludeDocumentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Ban className="mr-2 h-4 w-4" />}
-              Exclude document
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
 
   // ──────────────────────────────────────────────────
   // UPLOAD MODE
@@ -1190,7 +989,7 @@ export default function DocumentsRoute() {
                   <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Workspace
                   </Label>
-                  <Button type="button" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setIsCreateWorkspaceOpen(true)}>
+                  <Button type="button" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setCreateWorkspaceOpen(true)}>
                     <Plus className="mr-1 h-3.5 w-3.5" />
                     New
                   </Button>
@@ -1261,7 +1060,11 @@ export default function DocumentsRoute() {
             )}
           </div>
         </div>
-        {workspaceDialogs}
+        <CreateWorkspaceDialog
+          open={createWorkspaceOpen}
+          onOpenChange={setCreateWorkspaceOpen}
+          onCreated={(workspace) => setSelectedWorkspaceId(workspace.id)}
+        />
       </>
     );
   }
@@ -1271,539 +1074,315 @@ export default function DocumentsRoute() {
   // ──────────────────────────────────────────────────
   return (
     <>
-      <div className="flex h-full overflow-hidden">
-      {/* ── Left jobs rail (collapsible) ── */}
-      <div
-        className={cn(
-          "flex-shrink-0 border-r border-border/60 bg-background transition-all duration-200 overflow-hidden flex flex-col",
-          sidebarCollapsed ? "w-0 border-0" : "w-56"
-        )}
-      >
-        <div className="flex items-center justify-between px-3 py-3 border-b border-border/60">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Jobs</span>
-          <button
-            type="button"
-            onClick={() => {
-              userClearedSelectionRef.current = true;
-              setSelectedJobId(null);
-              setSidebarOpen(true);
-            }}
-            className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="New document"
-          >
-            <ArrowUpFromLine className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto py-2 space-y-0.5 px-1.5">
-          {recentJobs.map((job) => {
-            const isSelected = job.jobId === selectedJobId;
-            return (
-              <div key={job.jobId} className="group relative">
-                <button
-                  type="button"
-                  onClick={() => handleSelectJob(job.jobId)}
-                  className={cn(
-                    "w-full rounded-lg px-2 py-2 text-left text-sm transition-colors",
-                    isSelected
-                      ? "bg-accent text-accent-foreground"
-                      : "hover:bg-muted/60 text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <div className="truncate font-medium">{job.filename}</div>
-                  <div className="mt-0.5 flex items-center gap-1.5">
-                    <StatusBadge status={job.status} />
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => removeRecentJob(job.jobId)}
-                  className="absolute right-1 top-1 hidden rounded p-0.5 text-muted-foreground hover:text-destructive group-hover:flex"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── Main viewer ── */}
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        {/* Toolbar */}
-        <div className="flex-shrink-0 flex items-center gap-2 border-b border-border/60 bg-background/80 backdrop-blur-sm px-3 py-2">
-          <button
-            type="button"
-            onClick={() => setSidebarCollapsed((v) => !v)}
-            className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-            title={sidebarCollapsed ? "Show jobs" : "Hide jobs"}
-          >
-            {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </button>
-
-          <div className="min-w-0 flex-1 flex flex-col justify-center">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="truncate font-medium text-sm text-foreground">
-                {selectedRecentJob?.filename ?? activeJob?.filename ?? "Document"}
-              </span>
-              {selectedRecentJob && <StatusBadge status={selectedRecentJob.status} />}
-              {jobQuery.isFetching && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-            </div>
-            {/* Search toolbar */}
-            <div className="min-w-0">
-              <SearchToolbar
-                value={searchQuery}
-                onChange={setSearchQuery}
-                onClear={handleClearSearch}
-                matchCount={totalMatches}
-                isSearching={isSearching_fuzzy}
-                error={searchError}
-                activeMatchIndex={activeSearchMatchIndex}
-                activeMatch={activeSearchMatch}
-                onFindNext={totalMatches > 0 ? handleFindNextMatch : undefined}
-                onRedactAllInstances={totalMatches > 0 ? () => void redactAllSearchMatchesMutation.mutateAsync() : undefined}
-                isRedactingAllInstances={redactAllSearchMatchesMutation.isPending}
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <div className="flex items-center rounded-lg border border-border/70 overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setViewerMode("original")}
-                disabled={!localPdfUrl}
-                className={cn(
-                  "px-2.5 py-1 text-xs transition-colors",
-                  viewerMode === "original"
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-muted/50 disabled:opacity-40"
-                )}
-              >
-                Original
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewerMode("redacted")}
-                disabled={!redactedPreviewUrl && !selectedRecentJob?.hasRedactedPdf}
-                className={cn(
-                  "px-2.5 py-1 text-xs transition-colors border-l border-border/70",
-                  viewerMode === "redacted"
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-muted/50 disabled:opacity-40"
-                )}
-              >
-                Redacted
-              </button>
-            </div>
-
-            <Button
-              variant={drawMode ? "default" : "outline"}
-              size="sm"
-              onClick={() => setDrawMode((v) => !v)}
-              disabled={!canDraw}
-              className="text-xs h-7"
-            >
-              Draw
-            </Button>
-
-            <Button
-              size="sm"
-              onClick={() => void applyMutation.mutateAsync()}
-              disabled={!activeJob || activeJob.status !== "complete" || approvedCount === 0 || applyMutation.isPending}
-              className="text-xs h-7"
-            >
-              {applyMutation.isPending ? (
-                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-              ) : (
-                <CheckSquare className="mr-1 h-3 w-3" />
-              )}
-              Apply {approvedCount > 0 ? `(${approvedCount})` : ""}
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void approveAllMutation.mutateAsync()}
-              disabled={!activeJob || sortedSuggestions.length === 0 || sortedSuggestions.every((s) => s.approved) || approveAllMutation.isPending}
-              className="text-xs h-7"
-              title="Approve all unapproved suggestions (Ctrl+Shift+A)"
-            >
-              {approveAllMutation.isPending ? (
-                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-              ) : (
-                <CheckSquare className="mr-1 h-3 w-3" />
-              )}
-              Approve All
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void handleDownload()}
-              disabled={!selectedJobId}
-              className="text-xs h-7"
-            >
-              <Download className="mr-1 h-3 w-3" />
-              Download
-            </Button>
-          </div>
-        </div>
-
-        {/* PDF Canvas */}
-        <div className="flex-1 overflow-y-auto bg-muted/20">
-          <PdfDocumentViewer
-            source={viewerSource}
-            suggestions={sortedSuggestions}
-            searchMatches={searchMatches}
-            activeSearchMatchId={activeSearchMatch?.matchId ?? null}
-            isLoading={jobQuery.isLoading}
-            drawMode={drawMode && canDraw}
-            selectedSuggestionId={selectedSuggestionId}
-            focusPageRequest={focusPageRequest}
-            onSuggestionSelect={setSelectedSuggestionId}
-            onManualRedactionCreated={(pageIndex, rect) =>
-              manualRedactionMutation.mutate({ pageIndex, rects: [rect] })
-            }
-            onSearchMatchRedacted={(match: TextMatch) => {
-              // When user clicks a search match, create a manual redaction
-              if (match.rects.length > 0) {
-                manualRedactionMutation.mutate({
-                  pageIndex: match.pageNum,
-                  rects: match.rects,
-                });
-              }
-            }}
-            onDocumentLoaded={setPdfDocument}
-            pageStatus={Object.fromEntries(
-              Object.entries(pageStatus).map(([num, status]) => [
-                parseInt(num, 10),
-                {
-                  stage: status.stage,
-                  stageLabel: getStageLabel(status.stage),
-                  errorMessage: status.error_message,
-                },
-              ])
+      <DndContext onDragEnd={handleChatDrop}>
+        <div className="flex h-full overflow-hidden">
+          <div
+            className={cn(
+              "flex-shrink-0 border-r border-border/60 bg-background transition-all duration-200 overflow-hidden",
+              sidebarCollapsed ? "w-0 border-0" : "w-72"
             )}
-          />
-        </div>
-      </div>
+          >
+            {!sidebarCollapsed ? (
+              <WorkspaceFilesPanel
+                files={workspaceScopedFiles}
+                selectedJobId={selectedJobId}
+                onJobSelect={handleSelectJob}
+                onAddToChat={addDragContextFile}
+              />
+            ) : null}
+          </div>
 
-      {/* ── Right panel ── */}
-      <div className="flex-shrink-0 w-[28rem] xl:w-[36rem] border-l border-border/60 flex flex-col overflow-hidden bg-background">
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          <div className="flex-shrink-0 border-b border-border/60 px-4 py-3 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                  <FolderKanban className="h-3.5 w-3.5" />
-                  Workspace
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Manage shared rules and exclusions for related documents.
-                </p>
-              </div>
-              <Button type="button" variant="outline" className="h-8 px-2.5 text-xs" onClick={() => setIsCreateWorkspaceOpen(true)}>
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                New
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="flex shrink-0 items-center gap-2 border-b border-border/60 bg-background/80 px-3 py-2 backdrop-blur-sm">
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed((value) => !value)}
+                className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                title={sidebarCollapsed ? "Show files" : "Hide files"}
+              >
+                {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+              </button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  userClearedSelectionRef.current = true;
+                  setSelectedJobId(null);
+                  setSidebarOpen(true);
+                }}
+                className="text-xs"
+              >
+                <ArrowUpFromLine className="h-4 w-4" />
+                New document
               </Button>
-            </div>
 
-            <Select
-              value={selectedWorkspaceId ?? NO_WORKSPACE_VALUE}
-              onValueChange={(value) => setSelectedWorkspaceId(value === NO_WORKSPACE_VALUE ? null : value)}
-            >
-              <SelectTrigger className="h-9 text-xs">
-                <SelectValue placeholder="No workspace selected" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_WORKSPACE_VALUE}>No workspace</SelectItem>
-                {(workspacesQuery.data ?? []).map((workspace) => (
-                  <SelectItem key={workspace.id} value={workspace.id}>
-                    {workspace.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {selectedWorkspaceId ? (
-              workspaceQuery.isLoading ? (
-                <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Loading workspace state…
+              <div className="min-w-0 flex-1">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="truncate text-sm font-medium text-foreground">
+                    {selectedRecentJob?.filename ?? activeJob?.filename ?? "Document"}
+                  </span>
+                  {selectedRecentJob ? <StatusBadge status={selectedRecentJob.status} /> : null}
+                  {jobQuery.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
                 </div>
-              ) : workspaceQuery.error ? (
-                <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                  {getApiErrorMessage(workspaceQuery.error, "Unable to load workspace state.")}
-                </div>
-              ) : activeWorkspace ? (
-                <div className="space-y-3 rounded-xl border border-border/60 bg-muted/20 p-3">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Badge variant="secondary" className="rounded-full border-0">{workspaceDocumentCount} docs</Badge>
-                    <Badge variant="secondary" className="rounded-full border-0">{workspaceRuleCount} rules</Badge>
-                    <Badge variant="secondary" className="rounded-full border-0">{workspaceExclusionCount} exclusions</Badge>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-8 px-2.5 text-xs"
-                      disabled={!selectedJobId || !!currentWorkspaceDocument || addDocumentToWorkspaceMutation.isPending}
-                      onClick={() => void addDocumentToWorkspaceMutation.mutateAsync()}
-                    >
-                      {addDocumentToWorkspaceMutation.isPending ? (
-                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <FilePlus2 className="mr-1 h-3.5 w-3.5" />
-                      )}
-                      {currentWorkspaceDocument ? "In workspace" : "Add current doc"}
-                    </Button>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-8 px-2.5 text-xs"
-                      disabled={!selectedWorkspaceId}
-                      onClick={() => setIsRuleDialogOpen(true)}
-                    >
-                      <Plus className="mr-1 h-3.5 w-3.5" />
-                      Add rule
-                    </Button>
-
-                    {currentWorkspaceExclusion ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-8 px-2.5 text-xs"
-                        disabled={removeExclusionMutation.isPending}
-                        onClick={() => void removeExclusionMutation.mutateAsync()}
-                      >
-                        {removeExclusionMutation.isPending ? (
-                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <CheckSquare className="mr-1 h-3.5 w-3.5" />
-                        )}
-                        Re-include current doc
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-8 px-2.5 text-xs"
-                        disabled={!selectedJobId || !currentWorkspaceDocument}
-                        onClick={() => setIsExcludeDialogOpen(true)}
-                      >
-                        <Ban className="mr-1 h-3.5 w-3.5" />
-                        Exclude current doc
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className="grid gap-3 xl:grid-cols-3">
-                    <div className="space-y-1.5">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Documents</div>
-                      <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
-                        {activeWorkspace.documents.length > 0 ? (
-                          activeWorkspace.documents.map((document) => (
-                            <button
-                              key={document.id}
-                              type="button"
-                              onClick={() => handleSelectJob(document.id)}
-                              className={cn(
-                                "w-full rounded-lg border px-2.5 py-2 text-left text-[11px] transition-colors",
-                                document.id === selectedJobId ? "border-primary/30 bg-primary/5" : "border-border/60 hover:bg-muted/50"
-                              )}
-                            >
-                              <div className="truncate font-medium text-foreground">{getWorkspaceDocumentLabel(document)}</div>
-                              <div className="mt-1 text-[10px] text-muted-foreground">
-                                {document.excluded ? `Excluded · ${document.reason ?? "No reason"}` : `${document.suggestions_count ?? 0} suggestions`}
-                              </div>
-                            </button>
-                          ))
-                        ) : (
-                          <div className="rounded-lg border border-border/60 px-2.5 py-2 text-[11px] text-muted-foreground">
-                            No documents in this workspace yet.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Rules</div>
-                      <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
-                        {activeWorkspace.rules.length > 0 ? (
-                          activeWorkspace.rules.map((rule) => (
-                            <div key={rule.id} className="rounded-lg border border-border/60 px-2.5 py-2 text-[11px]">
-                              <div className="font-medium text-foreground">{rule.category}</div>
-                              <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">{rule.pattern}</div>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="rounded-lg border border-border/60 px-2.5 py-2 text-[11px] text-muted-foreground">
-                            No reusable rules yet.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Exclusions</div>
-                      <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
-                        {activeWorkspace.exclusions.length > 0 ? (
-                          activeWorkspace.exclusions.map((exclusion) => (
-                            <div key={exclusion.id} className="rounded-lg border border-border/60 px-2.5 py-2 text-[11px]">
-                              <div className="truncate font-medium text-foreground">{getWorkspaceDocumentLabel({ id: exclusion.document_id })}</div>
-                              <div className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">{exclusion.reason}</div>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="rounded-lg border border-border/60 px-2.5 py-2 text-[11px] text-muted-foreground">
-                            No exclusions in this workspace.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : null
-            ) : (
-              <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                Select a workspace to enable shared rules, exclusions, and multi-document agent context.
+                <SearchToolbar
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  onClear={handleClearSearch}
+                  matchCount={totalMatches}
+                  isSearching={isSearching_fuzzy}
+                  error={searchError}
+                  activeMatchIndex={activeSearchMatchIndex}
+                  activeMatch={activeSearchMatch}
+                  onFindNext={totalMatches > 0 ? handleFindNextMatch : undefined}
+                  onRedactAllInstances={
+                    totalMatches > 0 ? () => void redactAllSearchMatchesMutation.mutateAsync() : undefined
+                  }
+                  isRedactingAllInstances={redactAllSearchMatchesMutation.isPending}
+                />
               </div>
-            )}
-          </div>
 
-          <AgentChatPanel
-            conversation={conversation}
-            promptPresets={AGENT_PROMPT_PRESETS}
-            isStreaming={isChatStreaming}
-            onQuickPrompt={handleQuickPrompt}
-            renderMessageText={renderMessageWithPageTokens}
-          />
-          <div ref={chatEndRef} />
-          <div className="flex-shrink-0 border-t border-border/60 px-4 py-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                Suggestions
-              </span>
-              <span className="text-[11px] text-muted-foreground">
-                {sortedSuggestions.length} total
-              </span>
-            </div>
-
-            <div className="h-56 overflow-y-auto space-y-1.5 pr-1">
-              {jobQuery.isLoading ? (
-                <div className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-2 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Loading suggestions…
-                </div>
-              ) : jobQuery.error ? (
-                <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                  {getApiErrorMessage(jobQuery.error, "Unable to load job.")}
-                </div>
-              ) : !activeJob ? (
-                <div className="rounded-xl border border-border/60 px-3 py-3 text-xs text-muted-foreground">
-                  No job data yet — still processing?
-                </div>
-              ) : sortedSuggestions.length === 0 ? (
-                <div className="rounded-xl border border-border/60 px-3 py-3 text-xs text-muted-foreground flex items-center gap-2">
-                  <Sparkles className="h-4 w-4" />
-                  {activeJob.status === "complete" ? "No suggestions found." : "Waiting for analysis…"}
-                </div>
-              ) : (
-                sortedSuggestions.map((suggestion) => {
-                  const isSelected = selectedSuggestionId === suggestion.id;
-                  const suggestionPageLabel =
-                    suggestion.page_nums && suggestion.page_nums.length > 0
-                      ? `pp. ${suggestion.page_nums.map((page) => page + 1).join(", ")}`
-                      : `p.${getSuggestionViewerPageNumber(suggestion) ?? suggestion.page_num + 1}`;
-
-                  return (
-                    <button
-                      key={suggestion.id}
-                      type="button"
-                      onClick={() => handleSuggestionSelect(suggestion)}
-                      className={cn(
-                        "w-full rounded-xl border px-2.5 py-2 text-left text-[11px] transition-colors",
-                        isSelected ? "border-primary/30 bg-primary/5" : "border-border/60 hover:bg-muted/40"
-                      )}
-                    >
-                      <div className="flex items-start gap-2">
-                        <Checkbox
-                          checked={suggestion.approved}
-                          onCheckedChange={(checked) =>
-                            approvalMutation.mutate({ suggestionId: suggestion.id, approved: checked === true })
-                          }
-                          onClick={(e) => e.stopPropagation()}
-                          className="mt-0.5 flex-shrink-0"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate font-medium text-foreground">
-                            {suggestion.text || "Manual redaction"}
-                          </div>
-                          <div className="mt-1 flex items-center gap-1.5 flex-wrap text-[10px] text-muted-foreground">
-                            <span>{suggestionPageLabel}</span>
-                            <Badge
-                              variant="outline"
-                              className="rounded-full border-border/60 px-1.5 py-0 text-[10px] capitalize"
-                            >
-                              {suggestion.category}
-                            </Badge>
-                          </div>
-                          {suggestion.reasoning ? (
-                            <div className="mt-1 line-clamp-2 text-muted-foreground">
-                              {suggestion.reasoning}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          <div className="flex-shrink-0 border-t border-border/60 p-3">
-            <PromptInput
-              value={chatInput}
-              onValueChange={setChatInput}
-              onSubmit={handleChatSubmit}
-              isLoading={isChatStreaming}
-              disabled={!selectedJobId || isChatStreaming}
-              className="rounded-xl border-border/70 bg-muted/30"
-            >
-              <PromptInputTextarea
-                placeholder={selectedJobId ? "Ask about this document…" : "Select a job first"}
-                className="min-h-[44px] text-sm"
-              />
-              <PromptInputActions className="justify-end px-1 pb-1">
-                <PromptInputAction tooltip="Send message" side="top">
+              <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex items-center overflow-hidden rounded-lg border border-border/70">
                   <button
                     type="button"
-                    onClick={handleChatSubmit}
-                    disabled={!selectedJobId || chatInput.trim().length === 0 || isChatStreaming}
+                    onClick={() => setViewerMode("original")}
+                    disabled={!localPdfUrl}
                     className={cn(
-                      "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
-                      chatInput.trim().length > 0 && selectedJobId && !isChatStreaming
-                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                        : "bg-muted text-muted-foreground cursor-not-allowed"
+                      "px-2.5 py-1 text-xs transition-colors",
+                      viewerMode === "original"
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:bg-muted/50 disabled:opacity-40"
                     )}
                   >
-                    {isChatStreaming ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
+                    Original
                   </button>
-                </PromptInputAction>
-              </PromptInputActions>
-            </PromptInput>
+                  <button
+                    type="button"
+                    onClick={() => setViewerMode("redacted")}
+                    disabled={!redactedPreviewUrl && !selectedRecentJob?.hasRedactedPdf}
+                    className={cn(
+                      "border-l border-border/70 px-2.5 py-1 text-xs transition-colors",
+                      viewerMode === "redacted"
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:bg-muted/50 disabled:opacity-40"
+                    )}
+                  >
+                    Redacted
+                  </button>
+                </div>
+
+                <Button
+                  variant={drawMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setDrawMode((value) => !value)}
+                  disabled={!canDraw}
+                  className="h-7 text-xs"
+                >
+                  Draw
+                </Button>
+
+                <Button
+                  size="sm"
+                  onClick={() => void applyMutation.mutateAsync()}
+                  disabled={!activeJob || activeJob.status !== "complete" || approvedCount === 0 || applyMutation.isPending}
+                  className="h-7 text-xs"
+                >
+                  {applyMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckSquare className="mr-1 h-3 w-3" />}
+                  Apply {approvedCount > 0 ? `(${approvedCount})` : ""}
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void approveAllMutation.mutateAsync()}
+                  disabled={!activeJob || sortedSuggestions.length === 0 || sortedSuggestions.every((suggestion) => suggestion.approved) || approveAllMutation.isPending}
+                  className="h-7 text-xs"
+                  title="Approve all unapproved suggestions (Ctrl+Shift+A)"
+                >
+                  {approveAllMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckSquare className="mr-1 h-3 w-3" />}
+                  Approve All
+                </Button>
+
+                <Button variant="outline" size="sm" onClick={() => void handleDownload()} disabled={!selectedJobId} className="h-7 text-xs">
+                  <Download className="mr-1 h-3 w-3" />
+                  Download
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col bg-muted/20">
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <PdfDocumentViewer
+                  source={viewerSource}
+                  suggestions={sortedSuggestions}
+                  searchMatches={searchMatches}
+                  activeSearchMatchId={activeSearchMatch?.matchId ?? null}
+                  isLoading={jobQuery.isLoading}
+                  drawMode={drawMode && canDraw}
+                  selectedSuggestionId={selectedSuggestionId}
+                  focusPageRequest={focusPageRequest}
+                  onSuggestionSelect={setSelectedSuggestionId}
+                  onManualRedactionCreated={(pageIndex, rect) =>
+                    manualRedactionMutation.mutate({ pageIndex, rects: [rect] })
+                  }
+                  onSearchMatchRedacted={(match: TextMatch) => {
+                    if (match.rects.length > 0) {
+                      manualRedactionMutation.mutate({
+                        pageIndex: match.pageNum,
+                        rects: match.rects,
+                      });
+                    }
+                  }}
+                  onDocumentLoaded={setPdfDocument}
+                  pageStatus={Object.fromEntries(
+                    Object.entries(pageStatus).map(([num, status]) => [
+                      parseInt(num, 10),
+                      {
+                        stage: status.stage,
+                        stageLabel: getStageLabel(status.stage),
+                        errorMessage: status.error_message,
+                      },
+                    ])
+                  )}
+                />
+              </div>
+
+              <div className="border-t border-border/60 bg-background px-4 py-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                    Suggestions
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">{sortedSuggestions.length} total</span>
+                </div>
+
+                <div className="h-56 space-y-1.5 overflow-y-auto pr-1">
+                  {jobQuery.isLoading ? (
+                    <div className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Loading suggestions…
+                    </div>
+                  ) : jobQuery.error ? (
+                    <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      {getApiErrorMessage(jobQuery.error, "Unable to load job.")}
+                    </div>
+                  ) : !activeJob ? (
+                    <div className="rounded-xl border border-border/60 px-3 py-3 text-xs text-muted-foreground">
+                      No job data yet — still processing?
+                    </div>
+                  ) : sortedSuggestions.length === 0 ? (
+                    <div className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-3 text-xs text-muted-foreground">
+                      <Sparkles className="h-4 w-4" />
+                      {activeJob.status === "complete" ? "No suggestions found." : "Waiting for analysis…"}
+                    </div>
+                  ) : (
+                    sortedSuggestions.map((suggestion) => {
+                      const isSelected = selectedSuggestionId === suggestion.id;
+                      const suggestionPageLabel =
+                        suggestion.page_nums && suggestion.page_nums.length > 0
+                          ? `pp. ${suggestion.page_nums.map((page) => page + 1).join(", ")}`
+                          : `p.${getSuggestionViewerPageNumber(suggestion) ?? suggestion.page_num + 1}`;
+
+                      return (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          onClick={() => handleSuggestionSelect(suggestion)}
+                          className={cn(
+                            "w-full rounded-xl border px-2.5 py-2 text-left text-[11px] transition-colors",
+                            isSelected ? "border-primary/30 bg-primary/5" : "border-border/60 hover:bg-muted/40"
+                          )}
+                        >
+                          <div className="flex items-start gap-2">
+                            <Checkbox
+                              checked={suggestion.approved}
+                              onCheckedChange={(checked) =>
+                                approvalMutation.mutate({ suggestionId: suggestion.id, approved: checked === true })
+                              }
+                              onClick={(event) => event.stopPropagation()}
+                              className="mt-0.5 flex-shrink-0"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-medium text-foreground">
+                                {suggestion.text || "Manual redaction"}
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                                <span>{suggestionPageLabel}</span>
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-full border-border/60 px-1.5 py-0 text-[10px] capitalize"
+                                >
+                                  {suggestion.category}
+                                </Badge>
+                              </div>
+                              {suggestion.reasoning ? (
+                                <div className="mt-1 line-clamp-2 text-muted-foreground">{suggestion.reasoning}</div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex w-[28rem] shrink-0 flex-col overflow-hidden border-l border-border/60 bg-background xl:w-[36rem]">
+            <WorkspaceChatHeader
+              workspace={activeWorkspace}
+              activeJobId={selectedJobId}
+              onRulesClick={() => setRulesOpen(true)}
+              onExclusionsClick={() => setExclusionsOpen(true)}
+              onAddToWorkspace={() => setAddToWorkspaceOpen(true)}
+              onCreateWorkspace={() => setCreateWorkspaceOpen(true)}
+            />
+            <AgentChatPanel
+              conversation={conversation}
+              promptPresets={AGENT_PROMPT_PRESETS}
+              isStreaming={isChatStreaming}
+              chatInput={chatInput}
+              onChatInputChange={setChatInput}
+              onSubmit={handleChatSubmit}
+              inputPlaceholder={selectedJobId ? "Ask about these files…" : "Select a job first"}
+              inputDisabled={!selectedJobId || isChatStreaming}
+              onQuickPrompt={handleQuickPrompt}
+              renderMessageText={renderMessageWithPageTokens}
+            />
           </div>
         </div>
-      </div>
-      </div>
-      {workspaceDialogs}
+      </DndContext>
+
+      {selectedJobId ? (
+        <AddToWorkspaceDialog
+          jobId={selectedJobId}
+          jobFilename={selectedRecentJob?.filename}
+          open={addToWorkspaceOpen}
+          onOpenChange={setAddToWorkspaceOpen}
+          initialWorkspaceId={selectedWorkspaceId}
+          onAdded={(workspaceId) => setSelectedWorkspaceId(workspaceId)}
+        />
+      ) : null}
+
+      <CreateWorkspaceDialog
+        open={createWorkspaceOpen}
+        onOpenChange={setCreateWorkspaceOpen}
+        onCreated={(workspace) => setSelectedWorkspaceId(workspace.id)}
+      />
+
+      {activeWorkspace ? (
+        <>
+          <WorkspaceRulesSlideover open={rulesOpen} onOpenChange={setRulesOpen} workspace={activeWorkspace} />
+      <WorkspaceExclusionsSlideover
+        open={exclusionsOpen}
+        onOpenChange={setExclusionsOpen}
+        workspace={activeWorkspace}
+        activeJobId={selectedJobId}
+      />
+        </>
+      ) : null}
     </>
   );
 }

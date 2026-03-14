@@ -193,7 +193,7 @@ async def stream_analysis(
                 yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
                 return
 
-            pdf_bytes = await blob.download_pdf(job_id)
+            pdf_bytes = await blob.download_original_pdf(job_id)
             if not pdf_bytes:
                 yield f"data: {json.dumps({'error': 'PDF not found'})}\n\n"
                 return

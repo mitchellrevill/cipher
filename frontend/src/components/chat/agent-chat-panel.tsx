@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
 	Bot,
 	CheckCircle2,
+	ChevronDown,
 	FilePlus2,
 	FileSearch,
 	FolderKanban,
@@ -17,7 +18,7 @@ import {
 	WandSparkles,
 	X,
 } from "lucide-react";
-import { Badge } from "@/components/ui";
+import { Badge, Checkbox } from "@/components/ui";
 
 import {
 	PromptInput,
@@ -28,6 +29,7 @@ import {
 import { MotionDiv } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { useWorkspaceStore } from "@/store/workspace-store";
+import type { Suggestion } from "@/api/services";
 
 export interface AgentToolEvent {
 	id: string;
@@ -49,6 +51,18 @@ export interface AgentConversationState {
 	sessionId?: string;
 }
 
+export interface SuggestionsSection {
+	suggestions: Suggestion[];
+	selectedSuggestionId: string | null;
+	onSuggestionSelect: (s: Suggestion) => void;
+	onApprovalChange: (id: string, approved: boolean) => void;
+	getSuggestionPageLabel: (s: Suggestion) => string;
+	isLoading: boolean;
+	hasJobData: boolean;
+	jobStatus: string | null;
+	error?: string | null;
+}
+
 interface AgentChatPanelProps {
 	conversation: AgentConversationState;
 	promptPresets: string[];
@@ -60,6 +74,7 @@ interface AgentChatPanelProps {
 	inputDisabled?: boolean;
 	onQuickPrompt: (prompt: string) => void;
 	renderMessageText: (text: string) => ReactNode;
+	suggestionsSection?: SuggestionsSection;
 }
 
 const TOOL_ICON_MAP: Record<string, typeof Search> = {
@@ -159,9 +174,11 @@ export function AgentChatPanel({
 	inputDisabled = false,
 	onQuickPrompt,
 	renderMessageText,
+	suggestionsSection,
 }: AgentChatPanelProps) {
 	const { chatContextFiles, removeDragContextFile } = useWorkspaceStore();
 	const { isOver, setNodeRef } = useDroppable({ id: "chat-drop-zone" });
+	const [suggestionsOpen, setSuggestionsOpen] = useState(true);
 	const canSubmit = chatInput.trim().length > 0 && !inputDisabled && !isStreaming;
 
 	return (
@@ -252,6 +269,101 @@ export function AgentChatPanel({
 					) : null}
 				</div>
 			</div>
+
+			{suggestionsSection ? (
+			  <div className="border-t border-border/60 bg-background">
+			    <button
+			      type="button"
+			      aria-label="Toggle suggestions"
+			      className="flex w-full items-center justify-between px-4 py-2.5 transition-colors hover:bg-muted/30"
+			      onClick={() => setSuggestionsOpen((v) => !v)}
+			    >
+			      <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+			        Suggestions · {suggestionsSection.suggestions.length} total
+			      </span>
+			      <ChevronDown
+			        className={cn(
+			          "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+			          suggestionsOpen ? "" : "-rotate-90"
+			        )}
+			      />
+			    </button>
+			    {suggestionsOpen ? (
+			      <div className="h-56 space-y-1.5 overflow-y-auto px-4 pb-3">
+			        {suggestionsSection.isLoading ? (
+			          <div className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-2 text-xs text-muted-foreground">
+			            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+			            Loading suggestions…
+			          </div>
+			        ) : suggestionsSection.error ? (
+			          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+			            {suggestionsSection.error}
+			          </div>
+			        ) : !suggestionsSection.hasJobData ? (
+			          <div className="rounded-xl border border-border/60 px-3 py-3 text-xs text-muted-foreground">
+			            No job data yet — still processing?
+			          </div>
+			        ) : suggestionsSection.suggestions.length === 0 && suggestionsSection.jobStatus === "complete" ? (
+			          <div className="rounded-xl border border-border/60 px-3 py-3 text-xs text-muted-foreground">
+			            No suggestions found.
+			          </div>
+			        ) : suggestionsSection.suggestions.length === 0 ? (
+			          <div className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-3 text-xs text-muted-foreground">
+			            <Sparkles className="h-4 w-4" />
+			            Waiting for analysis…
+			          </div>
+			        ) : (
+			          suggestionsSection.suggestions.map((suggestion) => {
+			            const isSelected = suggestionsSection.selectedSuggestionId === suggestion.id;
+			            return (
+			              <button
+			                key={suggestion.id}
+			                type="button"
+			                onClick={() => suggestionsSection.onSuggestionSelect(suggestion)}
+			                className={cn(
+			                  "w-full rounded-xl border px-2.5 py-2 text-left text-[11px] transition-colors",
+			                  isSelected
+			                    ? "border-primary/30 bg-primary/5"
+			                    : "border-border/60 hover:bg-muted/40"
+			                )}
+			              >
+			                <div className="flex items-start gap-2">
+			                  <Checkbox
+			                    checked={suggestion.approved}
+			                    onCheckedChange={(checked) =>
+			                      suggestionsSection.onApprovalChange(suggestion.id, checked === true)
+			                    }
+			                    onClick={(event) => event.stopPropagation()}
+			                    className="mt-0.5 flex-shrink-0"
+			                  />
+			                  <div className="min-w-0 flex-1">
+			                    <div className="truncate font-medium text-foreground">
+			                      {suggestion.text || "Manual redaction"}
+			                    </div>
+			                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+			                      <span>{suggestionsSection.getSuggestionPageLabel(suggestion)}</span>
+			                      <Badge
+			                        variant="outline"
+			                        className="rounded-full border-border/60 px-1.5 py-0 text-[10px] capitalize"
+			                      >
+			                        {suggestion.category}
+			                      </Badge>
+			                    </div>
+			                    {suggestion.reasoning ? (
+			                      <div className="mt-1 line-clamp-2 text-muted-foreground">
+			                        {suggestion.reasoning}
+			                      </div>
+			                    ) : null}
+			                  </div>
+			                </div>
+			              </button>
+			            );
+			          })
+			        )}
+			      </div>
+			    ) : null}
+			  </div>
+			) : null}
 
 			{chatContextFiles.length > 0 ? (
 				<div className="flex flex-wrap gap-1.5 border-t border-border/60 px-3 py-2">

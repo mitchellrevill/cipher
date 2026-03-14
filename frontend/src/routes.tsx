@@ -7,7 +7,7 @@ import { RootRoute, Route, Router } from "@tanstack/react-router";
 import RootLayout from "@/routes/RootLayout";
 import IndexRoute from "@/routes/index";
 import LoginRoute from "@/routes/login";
-import DocumentsRoute from "@/routes/documents";
+import DocumentsRoute from "@/routes/designer";
 import WorkspaceDetailsRoute from "@/routes/workspaces.$workspaceId";
 
 const rootRoute = new RootRoute({

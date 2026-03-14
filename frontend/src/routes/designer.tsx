@@ -1,6 +1,7 @@
 import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useParams } from "@tanstack/react-router";
 import {
   ArrowUpFromLine,
   CheckSquare,
@@ -10,7 +11,6 @@ import {
   Loader2,
   Plus,
   ShieldCheck,
-  Sparkles,
   WandSparkles,
   X,
 } from "lucide-react";
@@ -40,7 +40,6 @@ import { WorkspaceRulesSlideover } from "@/components/workspace/workspace-rules-
 import {
   Badge,
   Button,
-  Checkbox,
   Label,
   Select,
   SelectContent,
@@ -102,6 +101,14 @@ export default function DocumentsRoute() {
   const selectedWorkspaceId = useWorkspaceStore((state) => state.selectedWorkspaceId);
   const setSelectedWorkspaceId = useWorkspaceStore((state) => state.setSelectedWorkspaceId);
   const addDragContextFile = useWorkspaceStore((state) => state.addDragContextFile);
+
+  const { workspaceId: urlWorkspaceId } = useParams() as { workspaceId?: string };
+
+  useEffect(() => {
+    if (urlWorkspaceId) {
+      setSelectedWorkspaceId(urlWorkspaceId);
+    }
+  }, [urlWorkspaceId, setSelectedWorkspaceId]);
 
   const [selectedJobId, setSelectedJobId] = useState<string | null>(
     activeJobId ?? recentJobs[0]?.jobId ?? null
@@ -352,6 +359,17 @@ export default function DocumentsRoute() {
       return Math.max(1, Math.min(pageCount, oneBasedPage));
     },
     [pageCount, prefersOneBasedSuggestionPages]
+  );
+
+  const getSuggestionPageLabel = useCallback(
+    (suggestion: Suggestion) => {
+      if (suggestion.page_nums && suggestion.page_nums.length > 0) {
+        return `pp. ${suggestion.page_nums.map((p) => p + 1).join(", ")}`;
+      }
+      const page = getSuggestionViewerPageNumber(suggestion);
+      return `p.${page ?? suggestion.page_num + 1}`;
+    },
+    [getSuggestionViewerPageNumber]
   );
 
   const requestPageFocus = useCallback(
@@ -1248,85 +1266,6 @@ export default function DocumentsRoute() {
                   )}
                 />
               </div>
-
-              <div className="border-t border-border/60 bg-background px-4 py-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                    Suggestions
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">{sortedSuggestions.length} total</span>
-                </div>
-
-                <div className="h-56 space-y-1.5 overflow-y-auto pr-1">
-                  {jobQuery.isLoading ? (
-                    <div className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-2 text-xs text-muted-foreground">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Loading suggestions…
-                    </div>
-                  ) : jobQuery.error ? (
-                    <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                      {getApiErrorMessage(jobQuery.error, "Unable to load job.")}
-                    </div>
-                  ) : !activeJob ? (
-                    <div className="rounded-xl border border-border/60 px-3 py-3 text-xs text-muted-foreground">
-                      No job data yet — still processing?
-                    </div>
-                  ) : sortedSuggestions.length === 0 ? (
-                    <div className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-3 text-xs text-muted-foreground">
-                      <Sparkles className="h-4 w-4" />
-                      {activeJob.status === "complete" ? "No suggestions found." : "Waiting for analysis…"}
-                    </div>
-                  ) : (
-                    sortedSuggestions.map((suggestion) => {
-                      const isSelected = selectedSuggestionId === suggestion.id;
-                      const suggestionPageLabel =
-                        suggestion.page_nums && suggestion.page_nums.length > 0
-                          ? `pp. ${suggestion.page_nums.map((page) => page + 1).join(", ")}`
-                          : `p.${getSuggestionViewerPageNumber(suggestion) ?? suggestion.page_num + 1}`;
-
-                      return (
-                        <button
-                          key={suggestion.id}
-                          type="button"
-                          onClick={() => handleSuggestionSelect(suggestion)}
-                          className={cn(
-                            "w-full rounded-xl border px-2.5 py-2 text-left text-[11px] transition-colors",
-                            isSelected ? "border-primary/30 bg-primary/5" : "border-border/60 hover:bg-muted/40"
-                          )}
-                        >
-                          <div className="flex items-start gap-2">
-                            <Checkbox
-                              checked={suggestion.approved}
-                              onCheckedChange={(checked) =>
-                                approvalMutation.mutate({ suggestionId: suggestion.id, approved: checked === true })
-                              }
-                              onClick={(event) => event.stopPropagation()}
-                              className="mt-0.5 flex-shrink-0"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate font-medium text-foreground">
-                                {suggestion.text || "Manual redaction"}
-                              </div>
-                              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-                                <span>{suggestionPageLabel}</span>
-                                <Badge
-                                  variant="outline"
-                                  className="rounded-full border-border/60 px-1.5 py-0 text-[10px] capitalize"
-                                >
-                                  {suggestion.category}
-                                </Badge>
-                              </div>
-                              {suggestion.reasoning ? (
-                                <div className="mt-1 line-clamp-2 text-muted-foreground">{suggestion.reasoning}</div>
-                              ) : null}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
             </div>
           </div>
 
@@ -1350,6 +1289,19 @@ export default function DocumentsRoute() {
               inputDisabled={!selectedJobId || isChatStreaming}
               onQuickPrompt={handleQuickPrompt}
               renderMessageText={renderMessageWithPageTokens}
+              suggestionsSection={{
+                suggestions: sortedSuggestions,
+                selectedSuggestionId,
+                onSuggestionSelect: handleSuggestionSelect,
+                onApprovalChange: (id, approved) => approvalMutation.mutate({ suggestionId: id, approved }),
+                getSuggestionPageLabel,
+                isLoading: jobQuery.isLoading,
+                hasJobData: !!activeJob,
+                jobStatus: activeJob?.status ?? null,
+                error: jobQuery.error
+                  ? getApiErrorMessage(jobQuery.error, "Unable to load job.")
+                  : null,
+              }}
             />
           </div>
         </div>

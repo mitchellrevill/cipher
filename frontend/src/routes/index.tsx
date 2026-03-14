@@ -14,7 +14,7 @@ export default function IndexRoute() {
 
   const openWorkspace = async (jobId?: string) => {
     if (jobId) setActiveJobId(jobId);
-    await navigate({ to: "/documents" });
+    await navigate({ to: "/designer" });
   };
 
   return (

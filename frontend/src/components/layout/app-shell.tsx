@@ -2,7 +2,7 @@ import React, { useState, type PropsWithChildren } from "react";
 import {
   ChevronLeft,
   ChevronRight,
-  FileSearch,
+  FolderKanban,
   House,
   LogOut,
   MoreHorizontal,
@@ -43,7 +43,7 @@ interface NavSectionConfig {
 
 const PRIMARY_NAV_ITEMS: ReadonlyArray<NavItemConfig> = [
   { id: "overview", icon: House, label: "Overview", to: "/", mobileShortLabel: "Home" },
-  { id: "documents", icon: FileSearch, label: "Workspaces", to: "/documents", mobileShortLabel: "Work" },
+  { id: "workspaces", icon: FolderKanban, label: "Workspaces", to: "/workspace", mobileShortLabel: "Work" },
 ];
 
 const NAV_SECTIONS: ReadonlyArray<NavSectionConfig> = [
@@ -97,7 +97,7 @@ export function AppShell({ children }: PropsWithChildren) {
 
   const handleSidebarJobSelect = (jobId: string) => {
     setActiveJobId(jobId);
-    void navigate({ to: "/documents" });
+    void navigate({ to: "/designer" });
   };
 
   const renderDesktopLink = (item: NavItemConfig) => {

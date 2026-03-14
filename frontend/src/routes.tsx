@@ -1,14 +1,14 @@
 /**
  * TanStack Router configuration and routes
- * File-based routing with TanStack Router
  */
 
 import { RootRoute, Route, Router } from "@tanstack/react-router";
 import RootLayout from "@/routes/RootLayout";
 import IndexRoute from "@/routes/index";
 import LoginRoute from "@/routes/login";
-import DocumentsRoute from "@/routes/designer";
-import WorkspaceDetailsRoute from "@/routes/workspaces.$workspaceId";
+import DesignerRoute from "@/routes/designer";
+import WorkspacesRoute from "@/routes/workspace.index";
+import WorkspaceDetailsRoute from "@/routes/workspace.$workspaceId";
 
 const rootRoute = new RootRoute({
   component: RootLayout,
@@ -26,19 +26,38 @@ const loginRoute = new Route({
   component: LoginRoute,
 });
 
-const documentsRoute = new Route({
+const workspacesIndexRoute = new Route({
   getParentRoute: () => rootRoute,
-  path: "/documents",
-  component: DocumentsRoute,
+  path: "/workspace",
+  component: WorkspacesRoute,
 });
 
 const workspaceDetailsRoute = new Route({
   getParentRoute: () => rootRoute,
-  path: "/workspaces/$workspaceId",
+  path: "/workspace/$workspaceId",
   component: WorkspaceDetailsRoute,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, loginRoute, documentsRoute, workspaceDetailsRoute]);
+const workspaceDesignerRoute = new Route({
+  getParentRoute: () => rootRoute,
+  path: "/workspace/$workspaceId/designer",
+  component: DesignerRoute,
+});
+
+const designerRoute = new Route({
+  getParentRoute: () => rootRoute,
+  path: "/designer",
+  component: DesignerRoute,
+});
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  loginRoute,
+  workspacesIndexRoute,       // /workspace
+  workspaceDetailsRoute,      // /workspace/$workspaceId
+  workspaceDesignerRoute,     // /workspace/$workspaceId/designer
+  designerRoute,              // /designer
+]);
 
 export const router = new Router({ routeTree });
 

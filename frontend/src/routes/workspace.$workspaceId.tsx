@@ -15,7 +15,7 @@ import { useWorkspaceStore } from "@/store/workspace-store";
 import { toast } from "sonner";
 
 export default function WorkspaceDetailsRoute() {
-  const { workspaceId } = useParams({ from: "/workspaces/$workspaceId" });
+  const { workspaceId } = useParams() as { workspaceId: string };
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { recentJobs } = useRecentJobs();
@@ -53,7 +53,7 @@ export default function WorkspaceDetailsRoute() {
       setActiveJobId(jobId);
     }
     setSelectedWorkspaceId(workspaceId);
-    void navigate({ to: "/documents" });
+    void navigate({ to: "/workspace/$workspaceId/designer", params: { workspaceId } });
   };
 
   if (isLoading) {

@@ -11,7 +11,7 @@ from redactor.models import Job, JobStatus, PageStatusEvent, SuggestionFoundEven
 from redactor.services.job_service import JobService
 from redactor.services.redaction_service import RedactionService
 from redactor.services.workspace_service import WorkspaceService
-from redactor.storage.blob import BlobStorageClient, get_blob_storage
+from redactor.storage.blob import BlobStorageClient, InMemoryBlobStorageClient, get_blob_storage
 from redactor.pipeline.orchestrator import run_pipeline
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ router = APIRouter()
 MAX_STREAM_SECONDS = 600  # 10 minutes
 
 
-def _get_blob(request: Request) -> BlobStorageClient:
+def _get_blob(request: Request) -> BlobStorageClient | InMemoryBlobStorageClient:
     """Get BlobStorageClient from app container."""
     settings = get_settings()
     return get_blob_storage(
@@ -67,7 +67,6 @@ async def _run_job(
     try:
         settings = get_settings()
         suggestions = await run_pipeline(pdf_bytes, instructions, settings)
-        await job_service.update_suggestions(job_id, len(suggestions))
         await blob.save_suggestions(job_id, suggestions)
         await job_service.update_status(job_id, JobStatus.COMPLETE)
     except Exception as ex:
@@ -126,12 +125,12 @@ async def upload_document(
         job_id=job_id,
         filename=file.filename,
         instructions=instructions,
-        workspace_id=normalized_workspace_id,
+        workspace_id=None,
     )
 
     if normalized_workspace_id:
         try:
-            await workspace_service.add_document(normalized_workspace_id, job_id)
+            await workspace_service.assign_job(normalized_workspace_id, job_id, job_service)
         except Exception as exc:
             logger.warning("Failed to add uploaded document %s to workspace %s: %s", job_id, normalized_workspace_id, exc)
 

@@ -85,7 +85,8 @@ async def get_workspace(
                     doc["filename"] = job.filename
                     doc["status"] = job.status.value if job.status else None
                     doc["page_count"] = job.page_count
-                    doc["suggestions_count"] = job.suggestions_count
+                    doc["blob_path"] = job.blob_path
+                    doc["output_blob_path"] = job.output_blob_path
         except Exception as exc:
             logger.warning("Failed to enrich workspace documents with job metadata: %s", exc)
 
@@ -99,12 +100,7 @@ async def add_document_to_workspace(
     job_service: Annotated[JobService, Depends(get_job_service)],
 ):
     try:
-        result = await service.add_document(workspace_id, payload.document_id)
-        try:
-            await job_service.update_workspace_id(payload.document_id, workspace_id)
-        except Exception as exc:
-            logger.warning("Failed to update workspace_id on job %s: %s", payload.document_id, exc)
-        return result
+        return await service.assign_job(workspace_id, payload.document_id, job_service)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -117,12 +113,7 @@ async def remove_document_from_workspace(
     job_service: Annotated[JobService, Depends(get_job_service)],
 ):
     try:
-        result = await service.remove_document(workspace_id, document_id)
-        try:
-            await job_service.update_workspace_id(document_id, None)
-        except Exception as exc:
-            logger.warning("Failed to clear workspace_id on job %s: %s", document_id, exc)
-        return result
+        return await service.remove_job(workspace_id, document_id, job_service)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

@@ -30,7 +30,7 @@ async def test_list_workspaces(mock_workspace_service, test_app):
 
 @pytest.mark.asyncio
 async def test_add_document_to_workspace(mock_workspace_service, test_app):
-    mock_workspace_service.add_document.return_value = {
+    mock_workspace_service.assign_job.return_value = {
         "id": "ws_test",
         "document_ids": ["doc_123"],
     }
@@ -43,3 +43,4 @@ async def test_add_document_to_workspace(mock_workspace_service, test_app):
 
     assert response.status_code == 200
     assert "doc_123" in response.json()["document_ids"]
+    mock_workspace_service.assign_job.assert_called_once()

@@ -4,6 +4,7 @@ import asyncio
 from contextlib import suppress
 import contextvars
 import logging
+import uuid
 from typing import Any, AsyncIterator, Optional
 
 from redactor.agent.tools.search import DocumentTools
@@ -13,6 +14,7 @@ from redactor.agent.knowledge_base import KnowledgeBase
 from redactor.services.job_service import JobService
 from redactor.services.redaction_service import RedactionService
 from redactor.services.rule_engine import RuleEngine
+from redactor.services.session_service import SessionService
 from redactor.services.workspace_service import WorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -34,9 +36,6 @@ SYSTEM_PROMPT = (
     "- When applying bulk changes, use the exact same filter arguments used in the preview."
 )
 
-_sessions: dict[str, dict[str, Any]] = {}
-
-
 class AgentService:
     """
     AI agent service for conversational assistance with document redaction.
@@ -53,6 +52,7 @@ class AgentService:
         redaction_service: Optional[RedactionService] = None,
         rule_engine: Optional[RuleEngine] = None,
         knowledge_base: Optional[KnowledgeBase] = None,
+        session_service: Optional[SessionService] = None,
     ):
         """
         Initialize AgentService with agent framework components.
@@ -71,6 +71,11 @@ class AgentService:
         self.redaction_service = redaction_service
         self.rule_engine = rule_engine
         self.knowledge_base = knowledge_base or KnowledgeBase(workspace_service=workspace_service)
+        self.session_service = session_service
+        self._session_state: dict[str, dict[str, Any]] = {}
+        self._runtime_sessions: dict[str, Any] = {}
+        self._hydrated_sessions: set[str] = set()
+        self._event_queues: dict[str, asyncio.Queue] = {}
 
         document_tools = DocumentTools(job_service=job_service, event_emitter=self._emit_tool_event)
         workspace_tools = WorkspaceTools(
@@ -118,11 +123,7 @@ class AgentService:
         if not session_id:
             return
 
-        session_data = _sessions.get(session_id)
-        if not session_data:
-            return
-
-        queue: asyncio.Queue | None = session_data.get("event_queue")
+        queue = self._event_queues.get(session_id)
         if not queue:
             return
 
@@ -160,59 +161,115 @@ class AgentService:
         )
 
     async def create_session(self, job_id: str, workspace_id: Optional[str] = None) -> str:
-        """
-        Create a new chat session for a job.
-
-        Args:
-            job_id: Job identifier
-
-        Returns:
-            Framework-backed session identifier
-        """
         session = self.agent.create_session()
         context = await self._build_context_summary(job_id, workspace_id)
-        _sessions[session.session_id] = {
-            "session": session,
+        state = {
+            "session_id": session.session_id,
             "job_id": job_id,
             "workspace_id": workspace_id,
             "context": context,
             "context_injected": False,
+            "messages": [],
         }
+        self._runtime_sessions[session.session_id] = session
+        self._hydrated_sessions.add(session.session_id)
+        await self._save_state(session.session_id, state)
         return session.session_id
 
     async def get_session(self, session_id: str) -> Optional[dict[str, Any]]:
-        """
-        Get a chat session by ID.
+        state = await self._get_state(session_id)
+        if not state:
+            return None
 
-        Args:
-            session_id: Session identifier
+        return {
+            **state,
+            "session": self._get_or_create_runtime_session(session_id, state),
+        }
 
-        Returns:
-            Session dict or None if not found
-        """
-        return _sessions.get(session_id)
+    async def _get_state(self, session_id: str) -> Optional[dict[str, Any]]:
+        if session_id in self._session_state:
+            return self._session_state[session_id]
+
+        if not self.session_service:
+            return None
+
+        payload = await self.session_service.load(session_id)
+        if not payload:
+            return None
+
+        if isinstance(payload, dict):
+            state = payload
+        else:
+            state = {
+                "session_id": session_id,
+                "job_id": None,
+                "workspace_id": None,
+                "context": "",
+                "context_injected": True,
+                "messages": payload,
+            }
+
+        state.setdefault("session_id", session_id)
+        state.setdefault("messages", [])
+        state.setdefault("context", "")
+        state.setdefault("context_injected", False)
+        self._session_state[session_id] = state
+        return state
+
+    async def _save_state(self, session_id: str, state: dict[str, Any]) -> None:
+        self._session_state[session_id] = state
+        if self.session_service:
+            await self.session_service.save(session_id, state)
+
+    def _get_or_create_runtime_session(self, session_id: str, state: dict[str, Any]):
+        session = self._runtime_sessions.get(session_id)
+        if session is not None:
+            return session
+
+        session = self.agent.create_session()
+        self._runtime_sessions[session_id] = session
+        if not state.get("messages"):
+            self._hydrated_sessions.add(session_id)
+        return session
+
+    def _history_prompt(self, messages: list[dict[str, str]]) -> str:
+        if not messages:
+            return ""
+        lines = [f"{message.get('role', 'user').upper()}: {message.get('content', '')}" for message in messages]
+        return "[Conversation so far]\n" + "\n".join(lines) + "\n[/Conversation so far]"
 
     async def _prepare_turn(
         self,
         session_id: str,
         message: str,
         workspace_id: Optional[str] = None,
-    ) -> tuple[Optional[dict[str, Any]], Optional[str], Optional[str]]:
-        session_data = _sessions.get(session_id)
-        if not session_data:
+    ) -> tuple[Optional[dict[str, Any]], Optional[Any], Optional[str], Optional[str]]:
+        session_state = await self._get_state(session_id)
+        if not session_state:
             return None, None, "Session not found"
 
-        if workspace_id and workspace_id != session_data.get("workspace_id"):
-            session_data["workspace_id"] = workspace_id
-            session_data["context"] = await self._build_context_summary(session_data["job_id"], workspace_id)
-            session_data["context_injected"] = False
+        runtime_session = self._get_or_create_runtime_session(session_id, session_state)
 
-        payload = message
-        if not session_data.get("context_injected"):
-            payload = f"[Context]\n{session_data['context']}\n[/Context]\n\n{message}"
-            session_data["context_injected"] = True
+        if workspace_id and workspace_id != session_state.get("workspace_id"):
+            session_state["workspace_id"] = workspace_id
+            session_state["context"] = await self._build_context_summary(session_state["job_id"], workspace_id)
+            session_state["context_injected"] = False
 
-        return session_data, payload, None
+        payload_parts = []
+        if not session_state.get("context_injected") and session_state.get("context"):
+            payload_parts.append(f"[Context]\n{session_state['context']}\n[/Context]")
+            session_state["context_injected"] = True
+
+        if session_id not in self._hydrated_sessions:
+            history_prompt = self._history_prompt(session_state.get("messages", []))
+            if history_prompt:
+                payload_parts.append(history_prompt)
+            self._hydrated_sessions.add(session_id)
+
+        payload_parts.append(message)
+        payload = "\n\n".join(part for part in payload_parts if part)
+
+        return session_state, runtime_session, payload, None
 
     async def run_turn(
         self,
@@ -232,15 +289,22 @@ class AgentService:
             Dict with assistant text
         """
         try:
-            session_data, payload, error = await self._prepare_turn(session_id, message, workspace_id)
-            if error or not session_data or payload is None:
+            session_state, runtime_session, payload, error = await self._prepare_turn(session_id, message, workspace_id)
+            if error or not session_state or runtime_session is None or payload is None:
                 return {"text": error or "Session not found"}
 
-            result = await self.agent.run(payload, session=session_data["session"])
+            result = await self.agent.run(payload, session=runtime_session)
             text = getattr(result, "text", None)
             if text is None:
                 value = getattr(result, "value", None)
                 text = str(value) if value is not None else str(result)
+            session_state.setdefault("messages", []).extend(
+                [
+                    {"role": "user", "content": message},
+                    {"role": "assistant", "content": str(text)},
+                ]
+            )
+            await self._save_state(session_id, session_state)
             return {"text": str(text)}
 
         except Exception:
@@ -253,18 +317,18 @@ class AgentService:
         message: str,
         workspace_id: Optional[str] = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        session_data, payload, error = await self._prepare_turn(session_id, message, workspace_id)
-        if error or not session_data or payload is None:
+        session_state, runtime_session, payload, error = await self._prepare_turn(session_id, message, workspace_id)
+        if error or not session_state or runtime_session is None or payload is None:
             yield {"type": "error", "error": error or "Session not found"}
             return
 
         queue: asyncio.Queue = asyncio.Queue()
-        session_data["event_queue"] = queue
+        self._event_queues[session_id] = queue
 
         async def consume_stream() -> None:
             token = _active_session_id.set(session_id)
             try:
-                stream = self.agent.run(payload, session=session_data["session"], stream=True)
+                stream = self.agent.run(payload, session=runtime_session, stream=True)
                 if not hasattr(stream, "__aiter__"):
                     stream = await stream
 
@@ -278,6 +342,13 @@ class AgentService:
                 if text is None:
                     value = getattr(final_response, "value", None)
                     text = str(value) if value is not None else str(final_response)
+                session_state.setdefault("messages", []).extend(
+                    [
+                        {"role": "user", "content": message},
+                        {"role": "assistant", "content": str(text)},
+                    ]
+                )
+                await self._save_state(session_id, session_state)
                 await queue.put({"type": "done", "response": str(text), "session_id": session_id})
             except Exception:
                 logger.exception("Error in streaming agent turn")
@@ -296,7 +367,7 @@ class AgentService:
                     break
                 yield event
         finally:
-            session_data.pop("event_queue", None)
+            self._event_queues.pop(session_id, None)
             if not task.done():
                 task.cancel()
                 with suppress(asyncio.CancelledError):

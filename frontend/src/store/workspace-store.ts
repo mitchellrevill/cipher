@@ -12,7 +12,6 @@ interface WorkspaceStoreState {
   setSelectedWorkspaceId: (id: string | null) => void;
   addDragContextFile: (file: ChatContextFile) => void;
   removeDragContextFile: (jobId: string) => void;
-  clearChatContext: () => void;
   reset: () => void;
 }
 
@@ -34,6 +33,5 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
     set((state) => ({
       chatContextFiles: state.chatContextFiles.filter((file) => file.jobId !== jobId),
     })),
-  clearChatContext: () => set({ chatContextFiles: [] }),
   reset: () => set(INITIAL_STATE),
 }));

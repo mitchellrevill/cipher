@@ -18,7 +18,7 @@ export default function LoginRoute() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      void navigate({ to: "/designer", replace: true });
+      void navigate({ to: "/jobs", replace: true });
     }
   }, [isAuthenticated, navigate]);
 
@@ -34,7 +34,7 @@ export default function LoginRoute() {
           roles: ["admin"],
         });
         setToken("dev-token-bypass");
-        await navigate({ to: "/designer", replace: true });
+        await navigate({ to: "/jobs", replace: true });
         return;
       }
 

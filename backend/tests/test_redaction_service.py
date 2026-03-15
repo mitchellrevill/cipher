@@ -7,15 +7,9 @@ from redactor.models import Suggestion, RedactionRect
 
 
 @pytest.fixture
-def mock_cosmos_client():
-    """Create a mock Cosmos DB client."""
-    return MagicMock()
-
-
-@pytest.fixture
-def redaction_service(mock_cosmos_client):
+def redaction_service():
     """Create a RedactionService instance without blob storage."""
-    return RedactionService(cosmos_client=mock_cosmos_client)
+    return RedactionService()
 
 
 @pytest.fixture
@@ -28,9 +22,9 @@ def mock_blob_client():
 
 
 @pytest.fixture
-def redaction_service_with_blob(mock_cosmos_client, mock_blob_client):
+def redaction_service_with_blob(mock_blob_client):
     """Create a RedactionService instance configured with blob storage."""
-    return RedactionService(cosmos_client=mock_cosmos_client, blob_client=mock_blob_client)
+    return RedactionService(blob_client=mock_blob_client)
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,7 @@
 import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useParams } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   ArrowUpFromLine,
   CheckSquare,
@@ -55,7 +55,6 @@ import { queryClient } from "@/lib/query-client";
 import {
   getLocalPdfUrl,
   registerLocalPdf,
-  setActiveJobId,
   upsertRecentJob,
   type RecentJobRecord,
 } from "@/lib/recent-jobs";
@@ -96,13 +95,17 @@ function sortSuggestions(suggestions: Suggestion[]): Suggestion[] {
 }
 
 export default function DocumentsRoute() {
-  const { recentJobs, activeJobId } = useRecentJobs();
+  const navigate = useNavigate();
+  const { recentJobs } = useRecentJobs();
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
   const selectedWorkspaceId = useWorkspaceStore((state) => state.selectedWorkspaceId);
   const setSelectedWorkspaceId = useWorkspaceStore((state) => state.setSelectedWorkspaceId);
   const addDragContextFile = useWorkspaceStore((state) => state.addDragContextFile);
 
-  const { workspaceId: urlWorkspaceId } = useParams({ strict: false }) as { workspaceId?: string };
+  const { workspaceId: urlWorkspaceId, jobId } = useParams({ strict: false }) as {
+    workspaceId?: string;
+    jobId?: string;
+  };
 
   useEffect(() => {
     if (urlWorkspaceId) {
@@ -110,9 +113,7 @@ export default function DocumentsRoute() {
     }
   }, [urlWorkspaceId, setSelectedWorkspaceId]);
 
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(
-    activeJobId ?? recentJobs[0]?.jobId ?? null
-  );
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(jobId ?? null);
   const userClearedSelectionRef = useRef(false);
   const [, setLocalPdfCacheVersion] = useState(0);
   const [dragOver, setDragOver] = useState(false);
@@ -156,18 +157,8 @@ export default function DocumentsRoute() {
   }, []);
 
   useEffect(() => {
-    if (recentJobs.length === 0) {
-      if (selectedJobId !== null) setSelectedJobId(null);
-      return;
-    }
-    // If user explicitly cleared the selection, don't auto-select
-    if (userClearedSelectionRef.current) {
-      userClearedSelectionRef.current = false;
-      return;
-    }
-    if (selectedJobId && recentJobs.some((job) => job.jobId === selectedJobId)) return;
-    setSelectedJobId(activeJobId ?? recentJobs[0]?.jobId ?? null);
-  }, [activeJobId, recentJobs, selectedJobId]);
+    setSelectedJobId(jobId ?? null);
+  }, [jobId]);
 
   const selectedRecentJob = useMemo(
     () => recentJobs.find((job) => job.jobId === selectedJobId) ?? null,
@@ -203,7 +194,7 @@ export default function DocumentsRoute() {
       filename: job.filename ?? selectedRecentJob?.filename ?? "untitled.pdf",
       createdAt: job.created_at ?? selectedRecentJob?.createdAt ?? new Date().toISOString(),
       status: job.status,
-      suggestionsCount: job.suggestions_count || job.suggestions.length,
+      suggestionsCount: job.suggestions.length,
       fileSize: selectedRecentJob?.fileSize,
       completedAt: job.completed_at ?? undefined,
       error: job.error ?? undefined,
@@ -434,7 +425,7 @@ export default function DocumentsRoute() {
       filename: selectedRecentJob?.filename ?? activeJob?.filename ?? "redacted.pdf",
       createdAt: selectedRecentJob?.createdAt ?? activeJob?.created_at ?? new Date().toISOString(),
       status: activeJob?.status ?? "complete",
-      suggestionsCount: activeJob?.suggestions_count ?? activeJob?.suggestions.length,
+      suggestionsCount: activeJob?.suggestions.length ?? 0,
       fileSize: selectedRecentJob?.fileSize,
       completedAt: activeJob?.completed_at ?? undefined,
       error: activeJob?.error ?? undefined,
@@ -467,8 +458,7 @@ export default function DocumentsRoute() {
         suggestionsCount: 0,
         fileSize: variables.file.size,
       });
-      setActiveJobId(job_id);
-      startTransition(() => setSelectedJobId(job_id));
+      setSelectedJobId(job_id);
       setSelectedFile(null);
       setViewerMode("original");
       setDrawMode(false);
@@ -476,6 +466,15 @@ export default function DocumentsRoute() {
       setSidebarOpen(false);
       await queryClient.invalidateQueries({ queryKey: ["redaction-job", job_id] });
       refreshWorkspaceQueries(selectedWorkspaceId);
+      const targetWorkspaceId = selectedWorkspaceId ?? urlWorkspaceId;
+      if (targetWorkspaceId) {
+        void navigate({
+          to: "/workspace/$workspaceId/designer/$jobId",
+          params: { workspaceId: targetWorkspaceId, jobId: job_id },
+        });
+      } else {
+        void navigate({ to: "/designer/$jobId", params: { jobId: job_id } });
+      }
       toast.success("Upload accepted – processing started.");
     },
     onError: (error) => {
@@ -607,12 +606,22 @@ export default function DocumentsRoute() {
   });
 
   const handleSelectJob = (jobId: string) => {
-    setActiveJobId(jobId);
     startTransition(() => setSelectedJobId(jobId));
     setViewerMode(getLocalPdfUrl(jobId) ? "original" : "redacted");
     setDrawMode(false);
     setSelectedSuggestionId(null);
     setSidebarOpen(false);
+
+    const targetWorkspaceId = selectedWorkspaceId ?? urlWorkspaceId;
+    if (targetWorkspaceId) {
+      void navigate({
+        to: "/workspace/$workspaceId/designer/$jobId",
+        params: { workspaceId: targetWorkspaceId, jobId },
+      });
+      return;
+    }
+
+    void navigate({ to: "/designer/$jobId", params: { jobId } });
   };
 
   const handleFileDrop = useCallback((file: File) => {
@@ -1139,6 +1148,16 @@ export default function DocumentsRoute() {
                   userClearedSelectionRef.current = true;
                   setSelectedJobId(null);
                   setSidebarOpen(true);
+                  const targetWorkspaceId = selectedWorkspaceId ?? urlWorkspaceId;
+                  if (targetWorkspaceId) {
+                    void navigate({
+                      to: "/workspace/$workspaceId/designer/new",
+                      params: { workspaceId: targetWorkspaceId },
+                    });
+                    return;
+                  }
+
+                  void navigate({ to: "/designer/new" });
                 }}
                 className="text-xs"
               >

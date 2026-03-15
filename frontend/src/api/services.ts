@@ -39,9 +39,10 @@ export interface RedactionJob {
   created_at?: string | null;
   completed_at?: string | null;
   user_id?: string | null;
-  suggestions_count: number;
   instructions?: string | null;
   workspace_id?: string | null;
+  blob_path?: string | null;
+  output_blob_path?: string | null;
 }
 
 export interface UploadDocumentInput {
@@ -114,7 +115,8 @@ export interface WorkspaceDocumentState {
   filename?: string | null;
   status?: JobStatus | string | null;
   page_count?: number;
-  suggestions_count?: number;
+  blob_path?: string | null;
+  output_blob_path?: string | null;
 }
 
 export interface WorkspaceState {

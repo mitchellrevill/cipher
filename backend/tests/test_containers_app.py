@@ -1,6 +1,6 @@
 # backend/tests/test_containers_app.py
 import pytest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from dependency_injector import providers
 from redactor.containers.app import AppContainer
 
@@ -14,9 +14,15 @@ def test_app_container_wires_both_layers():
         'azure_openai_api_version': '2024-02-01',
     })
 
+    jobs_container = MagicMock()
+    database = MagicMock()
+    database.get_container_client.return_value = jobs_container
+    cosmos_account = MagicMock()
+    cosmos_account.get_database_client.return_value = database
+
     # Mock clients to avoid Azure authentication
     container.clients.clients.cosmos_client.override(
-        providers.Singleton(lambda: AsyncMock())
+        providers.Singleton(lambda: cosmos_account)
     )
     container.clients.clients.blob_client.override(
         providers.Singleton(lambda: AsyncMock())

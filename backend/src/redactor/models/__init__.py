@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from enum import Enum
 from typing import Literal, Optional
 from datetime import datetime
@@ -37,14 +37,15 @@ class Job(BaseModel):
     status: JobStatus
     filename: Optional[str] = None
     page_count: int = 0
-    suggestions: list[Suggestion] = []
+    suggestions: list[Suggestion] = Field(default_factory=list)
     error: Optional[str] = None
     created_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     user_id: Optional[str] = None
-    suggestions_count: int = 0
     instructions: Optional[str] = None
     workspace_id: Optional[str] = None
+    blob_path: Optional[str] = None
+    output_blob_path: Optional[str] = None
 
 # New streaming models
 from redactor.models.streaming import (

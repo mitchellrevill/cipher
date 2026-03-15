@@ -1,41 +1,18 @@
-"""
-Job service for document processing lifecycle management.
-
-Manages creation, retrieval, and state management of document processing jobs.
-Persists job data to Cosmos DB with indefinite retention for UX.
-"""
-
 import logging
-from typing import Optional, List
 from datetime import datetime
+from typing import Optional
+
 from redactor.models import Job, JobStatus
 
 logger = logging.getLogger(__name__)
 
 
 class JobService:
-    """
-    Job lifecycle management service.
+    """CRUD for job documents in a single Cosmos container."""
 
-    Handles CRUD operations for jobs and state persistence.
-    Integrates with Cosmos DB for indefinite job history.
-    """
-
-    CONTAINER_NAME = "jobs"
-    PARTITION_KEY = "job_id"
-
-    def __init__(self, cosmos_client, blob_client=None):
-        """Initialize JobService with Cosmos DB and optional Blob Storage clients."""
-        self.cosmos_client = cosmos_client
+    def __init__(self, cosmos_container, blob_client=None):
+        self.cosmos_container = cosmos_container
         self.blob_client = blob_client
-        self.container = None
-
-    async def _get_container(self):
-        """Lazy-load container reference."""
-        if self.container is None:
-            # Will be set up when DB is initialized (Task 9)
-            pass
-        return self.container
 
     async def create_job(
         self,
@@ -45,17 +22,6 @@ class JobService:
         instructions: Optional[str] = None,
         workspace_id: Optional[str] = None,
     ) -> Job:
-        """
-        Create a new job.
-
-        Args:
-            job_id: Unique job identifier (UUID)
-            filename: Original filename
-            user_id: Optional user identifier
-
-        Returns:
-            Job: Created job with metadata
-        """
         now = datetime.utcnow()
         job_doc = {
             "id": job_id,
@@ -67,42 +33,27 @@ class JobService:
             "created_at": now.isoformat(),
             "completed_at": None,
             "user_id": user_id,
-            "suggestions_count": 0,
             "instructions": instructions or "",
             "workspace_id": workspace_id,
+            "blob_path": f"jobs/{job_id}/original.pdf",
+            "output_blob_path": f"jobs/{job_id}/redacted.pdf",
         }
 
-        # Create item in Cosmos DB
-        result = self.cosmos_client.create_item(body=job_doc)
-
+        result = self.cosmos_container.create_item(body=job_doc)
         return self._doc_to_job(result)
 
     async def get_job(self, job_id: str) -> Optional[Job]:
-        """
-        Get a job by ID.
-
-        Args:
-            job_id: Job identifier
-
-        Returns:
-            Job if found, None otherwise
-        """
         try:
-            result = self.cosmos_client.read_item(item=job_id, partition_key=job_id)
+            result = self.cosmos_container.read_item(item=job_id, partition_key=job_id)
             job = self._doc_to_job(result)
-            logger.info(f"Retrieved job {job_id} from Cosmos: status={job.status}, suggestions_count={job.suggestions_count}")
+            logger.info("Retrieved job %s from Cosmos: status=%s", job_id, job.status)
 
-            # Load suggestions from blob storage if available
             if self.blob_client:
-                logger.info(f"blob_client is available, attempting to load suggestions for {job_id}")
                 try:
                     suggestions = await self.blob_client.load_suggestions(job_id)
                     job.suggestions = suggestions
-                    logger.info(f"Loaded {len(suggestions)} suggestions for job {job_id}")
                 except Exception as e:
-                    logger.warning(f"Failed to load suggestions for {job_id}: {type(e).__name__}: {str(e)[:100]}")
-            else:
-                logger.warning(f"blob_client is None for job {job_id} - suggestions will not be loaded")
+                    logger.warning("Failed to load suggestions for %s: %s", job_id, e)
 
             return job
         except Exception:
@@ -113,18 +64,7 @@ class JobService:
         skip: int = 0,
         limit: int = 50,
         unassigned_only: bool = False,
-    ) -> List[Job]:
-        """
-        List jobs with pagination.
-
-        Args:
-            skip: Number of items to skip
-            limit: Maximum items to return
-            unassigned_only: If True, only return jobs with no workspace_id
-
-        Returns:
-            List of jobs (without suggestions loaded)
-        """
+    ) -> list[Job]:
         if unassigned_only:
             query = (
                 "SELECT * FROM c WHERE (NOT IS_DEFINED(c.workspace_id) OR IS_NULL(c.workspace_id) OR c.workspace_id = '') "
@@ -133,7 +73,7 @@ class JobService:
         else:
             query = f"SELECT * FROM c ORDER BY c.created_at DESC OFFSET {skip} LIMIT {limit}"
 
-        results = self.cosmos_client.query_items(
+        results = self.cosmos_container.query_items(
             query=query,
             enable_cross_partition_query=True,
         )
@@ -142,65 +82,29 @@ class JobService:
         return [self._doc_to_job(doc) for doc in results]
 
     async def update_status(self, job_id: str, status: JobStatus, error: Optional[str] = None):
-        """
-        Update job status.
-
-        Args:
-            job_id: Job identifier
-            status: New status
-            error: Optional error message
-        """
+        doc = self.cosmos_container.read_item(item=job_id, partition_key=job_id)
         updates = {
             "status": status.value,
-            "error": error
+            "error": error,
         }
 
         if status == JobStatus.COMPLETE:
             updates["completed_at"] = datetime.utcnow().isoformat()
 
-        self.cosmos_client.update_item(item=job_id, body=updates)
-
-    async def update_suggestions(self, job_id: str, suggestions_count: int):
-        """
-        Update suggestion count for a job.
-
-        Args:
-            job_id: Job identifier
-            suggestions_count: Number of suggestions
-        """
-        self.cosmos_client.update_item(
-            item=job_id,
-            body={"suggestions_count": suggestions_count}
-        )
+        doc.update(updates)
+        self.cosmos_container.replace_item(item=job_id, body=doc)
 
     async def update_workspace_id(self, job_id: str, workspace_id: Optional[str]) -> None:
-        """
-        Update the workspace_id field on a job document.
+        doc = self.cosmos_container.read_item(item=job_id, partition_key=job_id)
+        doc["workspace_id"] = workspace_id
+        self.cosmos_container.replace_item(item=job_id, body=doc)
 
-        Args:
-            job_id: Job identifier
-            workspace_id: Workspace ID to assign, or None to clear
-        """
-        self.cosmos_client.update_item(
-            item=job_id,
-            body={"workspace_id": workspace_id},
-        )
-
-    async def list_jobs_by_ids(self, job_ids: List[str]) -> List[Job]:
-        """
-        Fetch a batch of jobs by their IDs.
-
-        Args:
-            job_ids: List of job IDs to fetch
-
-        Returns:
-            List of matching jobs (without suggestions loaded)
-        """
+    async def list_jobs_by_ids(self, job_ids: list[str]) -> list[Job]:
         if not job_ids:
             return []
         placeholders = ", ".join(f"'{jid}'" for jid in job_ids)
         query = f"SELECT * FROM c WHERE c.job_id IN ({placeholders})"
-        results = self.cosmos_client.query_items(
+        results = self.cosmos_container.query_items(
             query=query,
             enable_cross_partition_query=True,
         )
@@ -209,17 +113,9 @@ class JobService:
         return [self._doc_to_job(doc) for doc in results]
 
     async def delete_job(self, job_id: str):
-        """
-        Soft delete a job (mark as archived).
-
-        Args:
-            job_id: Job identifier
-        """
-        # Soft delete by marking status
         await self.update_status(job_id, JobStatus.FAILED, "Archived")
 
     def _doc_to_job(self, doc: dict) -> Job:
-        """Convert Cosmos DB document to Job model."""
         created_at = doc.get("created_at")
         if isinstance(created_at, str):
             created_at = datetime.fromisoformat(created_at)
@@ -237,7 +133,8 @@ class JobService:
             created_at=created_at,
             completed_at=completed_at,
             user_id=doc.get("user_id"),
-            suggestions_count=doc.get("suggestions_count", 0),
             instructions=doc.get("instructions"),
             workspace_id=doc.get("workspace_id"),
+            blob_path=doc.get("blob_path"),
+            output_blob_path=doc.get("output_blob_path"),
         )

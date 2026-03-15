@@ -13,7 +13,6 @@ import {
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { WorkspaceSidebarJobs } from "@/components/workspace/workspace-sidebar-jobs";
 import { useRecentJobs } from "@/hooks/useRecentJobs";
-import { setActiveJobId } from "@/lib/recent-jobs";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Button,
@@ -73,12 +72,21 @@ const getUserInitials = (name?: string | null, email?: string | null): string =>
 export function AppShell({ children }: PropsWithChildren) {
   const isOpen = useUIStore((s) => s.sidebarOpen);
   const setIsOpen = useUIStore((s) => s.setSidebarOpen);
-  const { recentJobs, activeJobId } = useRecentJobs();
+  const { recentJobs } = useRecentJobs();
   const [sidebarLayout, setSidebarLayout] = useState<"left" | "top">(() =>
     readStringStorage(SIDEBAR_LAYOUT_KEY, "left") === "top" ? "top" : "left"
   );
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+    const activeJobId = (() => {
+      const designerPathMatch = pathname.match(/\/designer\/([^/]+)$/);
+      if (!designerPathMatch) {
+        return null;
+      }
+
+      return designerPathMatch[1] === "new" ? null : designerPathMatch[1];
+    })();
+
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
@@ -98,8 +106,7 @@ export function AppShell({ children }: PropsWithChildren) {
   };
 
   const handleSidebarJobSelect = (jobId: string) => {
-    setActiveJobId(jobId);
-    void navigate({ to: "/designer" });
+    void navigate({ to: "/designer/$jobId", params: { jobId } });
   };
 
   const renderDesktopLink = (item: NavItemConfig) => {

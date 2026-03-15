@@ -32,11 +32,4 @@ describe("useWorkspaceStore", () => {
     expect(result.current.chatContextFiles).toHaveLength(0);
   });
 
-  it("clears all context files", () => {
-    const { result } = renderHook(() => useWorkspaceStore());
-    act(() => result.current.addDragContextFile({ jobId: "j1", filename: "a.pdf", workspaceId: "ws-1" }));
-    act(() => result.current.addDragContextFile({ jobId: "j2", filename: "b.pdf", workspaceId: "ws-1" }));
-    act(() => result.current.clearChatContext());
-    expect(result.current.chatContextFiles).toHaveLength(0);
-  });
 });

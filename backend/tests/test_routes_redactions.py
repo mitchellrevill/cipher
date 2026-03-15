@@ -1,7 +1,7 @@
-"""Tests for redactions route - legacy tests for backwards compatibility."""
+"""Tests for redactions routes."""
 import pytest
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, AsyncMock
 from datetime import datetime
 from redactor.models import Job, JobStatus, Suggestion, RedactionRect
 
@@ -22,68 +22,17 @@ def seeded_job():
     )
 
 
-@pytest.fixture
-def mock_job_service_redactions(seeded_job):
-    """Create a mock JobService with a seeded job for redactions testing."""
-    from unittest.mock import AsyncMock, MagicMock
-    from redactor.services.job_service import JobService
-
-    service = MagicMock(spec=JobService)
+@pytest.fixture(autouse=True)
+def seed_job_service(mock_job_service, seeded_job):
+    """Seed the shared mocked job service with a known completed job."""
 
     async def get_job_side_effect(job_id: str):
-        """Return seeded job for known job_id, None otherwise."""
         if job_id == "job-test":
             return seeded_job
         return None
 
-    service.get_job = AsyncMock(side_effect=get_job_side_effect)
-    return service
-
-
-@pytest.fixture
-def mock_container_redactions(mock_job_service_redactions, mock_redaction_service, mock_blob_client):
-    """Create a mock AppContainer for redactions testing."""
-    from unittest.mock import MagicMock
-    from redactor.containers.app import AppContainer
-
-    container = MagicMock()  # Don't use spec to allow arbitrary attribute assignment
-    container.job_service.return_value = mock_job_service_redactions
-    container.redaction_service.return_value = mock_redaction_service
-    container.blob_client.return_value = mock_blob_client
-    container.services = MagicMock()
-    container.services.job_service = MagicMock(return_value=mock_job_service_redactions)
-    container.services.redaction_service = MagicMock(return_value=mock_redaction_service)
-    return container
-
-
-@pytest.fixture
-def test_app(mock_container_redactions):
-    """Create a test FastAPI app for redactions route."""
-    from contextlib import asynccontextmanager
-    from fastapi import FastAPI
-    from fastapi.middleware.cors import CORSMiddleware
-    from redactor.routes import redactions
-    from redactor.config import get_settings
-
-    @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        app.container = mock_container_redactions
-        yield
-
-    test_app = FastAPI(lifespan=lifespan)
-    test_app.container = mock_container_redactions
-
-    settings = get_settings()
-
-    test_app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    test_app.include_router(redactions.router, prefix="/api/jobs/{job_id}/redactions", tags=["redactions"])
-    return test_app
+    mock_job_service.get_job.side_effect = get_job_side_effect
+    return mock_job_service
 
 @pytest.mark.asyncio
 async def test_toggle_suggestion_approval(test_app, mock_redaction_service):

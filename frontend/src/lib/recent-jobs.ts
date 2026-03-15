@@ -2,7 +2,6 @@ import { parseJSON } from "@/lib/utils";
 import type { JobStatus } from "@/api/services";
 
 const RECENT_JOBS_STORAGE_KEY = "cipher.recentJobs";
-const ACTIVE_JOB_STORAGE_KEY = "cipher.activeJobId";
 const RECENT_JOBS_EVENT = "cipher:recent-jobs-updated";
 
 export interface RecentJobRecord {
@@ -56,7 +55,7 @@ export function subscribeRecentJobs(callback: () => void): () => void {
   }
 
   const onStorage = (event: StorageEvent) => {
-    if (event.key === RECENT_JOBS_STORAGE_KEY || event.key === ACTIVE_JOB_STORAGE_KEY) {
+    if (event.key === RECENT_JOBS_STORAGE_KEY) {
       callback();
     }
   };
@@ -68,32 +67,6 @@ export function subscribeRecentJobs(callback: () => void): () => void {
     window.removeEventListener("storage", onStorage);
     window.removeEventListener(RECENT_JOBS_EVENT, callback);
   };
-}
-
-export function getActiveJobId(): string | null {
-  if (!canUseStorage()) {
-    return null;
-  }
-
-  return window.localStorage.getItem(ACTIVE_JOB_STORAGE_KEY);
-}
-
-export function setActiveJobId(jobId: string | null) {
-  if (!canUseStorage()) {
-    return;
-  }
-
-  if (getActiveJobId() === jobId) {
-    return;
-  }
-
-  if (jobId) {
-    window.localStorage.setItem(ACTIVE_JOB_STORAGE_KEY, jobId);
-  } else {
-    window.localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY);
-  }
-
-  emitRecentJobsUpdated();
 }
 
 export function upsertRecentJob(job: RecentJobRecord) {
@@ -121,21 +94,6 @@ export function upsertRecentJob(job: RecentJobRecord) {
   emitRecentJobsUpdated();
 }
 
-export function removeRecentJob(jobId: string) {
-  if (!canUseStorage()) {
-    return;
-  }
-
-  const nextJobs = getRecentJobs().filter((job) => job.jobId !== jobId);
-  window.localStorage.setItem(RECENT_JOBS_STORAGE_KEY, JSON.stringify(nextJobs));
-
-  if (getActiveJobId() === jobId) {
-    setActiveJobId(nextJobs[0]?.jobId ?? null);
-  } else {
-    emitRecentJobsUpdated();
-  }
-}
-
 export function registerLocalPdf(jobId: string, file: File): string {
   const existing = localPdfRegistry.get(jobId);
   if (existing) {
@@ -154,8 +112,4 @@ export function registerLocalPdf(jobId: string, file: File): string {
 
 export function getLocalPdfUrl(jobId: string): string | null {
   return localPdfRegistry.get(jobId)?.objectUrl ?? null;
-}
-
-export function getLocalPdfMetadata(jobId: string): LocalPdfRecord | null {
-  return localPdfRegistry.get(jobId) ?? null;
 }

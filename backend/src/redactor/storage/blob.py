@@ -45,6 +45,11 @@ class BlobStorageClient:
         payload = json.dumps([s.model_dump(mode='json') for s in suggestions])
         await blob.upload_blob(payload.encode(), overwrite=True)
 
+    async def upload_json(self, blob_name: str, data: list | dict) -> None:
+        blob = self._container_client.get_blob_client(blob_name)
+        payload = json.dumps(data)
+        await blob.upload_blob(payload.encode(), overwrite=True)
+
     async def load_suggestions(self, job_id: str) -> list[Suggestion]:
         name = self._blob_name(job_id, "suggestions.json")
         blob = self._container_client.get_blob_client(name)
@@ -54,6 +59,15 @@ class BlobStorageClient:
             return [Suggestion(**s) for s in json.loads(data)]
         except ResourceNotFoundError:
             return []
+
+    async def download_json(self, blob_name: str) -> list | dict | None:
+        blob = self._container_client.get_blob_client(blob_name)
+        try:
+            stream = await blob.download_blob()
+            data = await stream.readall()
+            return json.loads(data)
+        except ResourceNotFoundError:
+            return None
 
     async def save_redacted_pdf(self, job_id: str, data: bytes) -> None:
         name = self._blob_name(job_id, "redacted.pdf")
@@ -99,12 +113,21 @@ class InMemoryBlobStorageClient:
         payload = json.dumps([s.model_dump(mode='json') for s in suggestions])
         self._store[name] = payload.encode()
 
+    async def upload_json(self, blob_name: str, data: list | dict) -> None:
+        self._store[blob_name] = json.dumps(data).encode()
+
     async def load_suggestions(self, job_id: str) -> list[Suggestion]:
         name = self._blob_name(job_id, "suggestions.json")
         data = self._store.get(name)
         if not data:
             return []
         return [Suggestion(**s) for s in json.loads(data)]
+
+    async def download_json(self, blob_name: str) -> list | dict | None:
+        data = self._store.get(blob_name)
+        if data is None:
+            return None
+        return json.loads(data)
 
     async def save_redacted_pdf(self, job_id: str, data: bytes) -> None:
         name = self._blob_name(job_id, "redacted.pdf")

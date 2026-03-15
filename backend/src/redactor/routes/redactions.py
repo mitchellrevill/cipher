@@ -51,7 +51,6 @@ async def apply_redactions(
     job_id: str,
     request: Request,
     job_service: Annotated[JobService, Depends(get_job_service)],
-    redaction_service: Annotated[RedactionService, Depends(get_redaction_service)]
 ):
     """Apply redactions by saving approved suggestions and generating redacted PDF."""
     job = await job_service.get_job(job_id)
@@ -100,7 +99,7 @@ async def add_manual_redaction(
         approved=True, source="manual", created_at=datetime.utcnow()
     )
     job.suggestions.append(s)
-    # Persist manual suggestion to database
+    # Persist manual suggestion to blob storage.
     await redaction_service.add_manual_suggestion(job_id, s)
     return s
 
@@ -120,7 +119,7 @@ async def toggle_approval(
     for s in job.suggestions:
         if s.id == suggestion_id:
             s.approved = update.approved
-            # Persist approval change to database
+            # Persist approval change to blob storage.
             await redaction_service.toggle_approval(job_id, suggestion_id, update.approved)
             return {"id": suggestion_id, "approved": update.approved}
     raise HTTPException(status_code=404, detail="Suggestion not found")

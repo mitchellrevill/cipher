@@ -109,12 +109,21 @@ export default function WorkspacesRoute() {
                     type="button"
                     size="sm"
                     className="flex-1"
-                    onClick={() =>
+                    onClick={() => {
+                      const firstJobId = workspace.document_ids?.[0];
+                      if (firstJobId) {
+                        void navigate({
+                          to: "/workspace/$workspaceId/designer/$jobId",
+                          params: { workspaceId: workspace.id, jobId: firstJobId },
+                        });
+                        return;
+                      }
+
                       void navigate({
-                        to: "/workspace/$workspaceId/designer",
+                        to: "/workspace/$workspaceId/designer/new",
                         params: { workspaceId: workspace.id },
-                      })
-                    }
+                      });
+                    }}
                   >
                     <WandSparkles className="mr-1 h-3.5 w-3.5" />
                     Open in designer

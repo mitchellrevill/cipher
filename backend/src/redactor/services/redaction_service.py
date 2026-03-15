@@ -1,12 +1,4 @@
-"""
-Redaction suggestion management service.
-
-Manages CRUD operations for suggestions and approval state.
-
-Suggestions are persisted in blob storage as a per-job JSON document.
-The legacy Cosmos-backed suggestion methods were removed once suggestion
-storage moved fully to Azure Blob Storage.
-"""
+"""Redaction suggestion management service backed by blob storage."""
 
 from collections.abc import Iterable
 from typing import Optional
@@ -22,13 +14,8 @@ class RedactionService:
     Suggestions are PII/sensitive data identified for redaction.
     """
 
-    def __init__(self, cosmos_client, blob_client=None):
-        """Initialize RedactionService.
-
-        The `cosmos_client` parameter is kept for constructor compatibility with
-        existing container wiring, but suggestion persistence is blob-backed.
-        """
-        self.cosmos_client = cosmos_client
+    def __init__(self, blob_client=None):
+        """Initialize RedactionService."""
         self.blob_client = blob_client
 
     async def toggle_approval(self, job_id: str, suggestion_id: str, approved: bool):

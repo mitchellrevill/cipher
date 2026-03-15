@@ -41,6 +41,8 @@ def mock_blob_client():
     client.download_redacted_pdf = AsyncMock(return_value=b"%PDF-redacted")
     client.save_redacted_pdf = AsyncMock()
     client.save_suggestions = AsyncMock()
+    client.upload_json = AsyncMock()
+    client.download_json = AsyncMock(return_value=None)
     client.delete_pdfs = AsyncMock()
     return client
 
@@ -63,7 +65,8 @@ def mock_job_service():
     service.create_job = AsyncMock()
     service.get_job = AsyncMock()
     service.update_status = AsyncMock()
-    service.update_suggestions = AsyncMock()
+    service.update_workspace_id = AsyncMock()
+    service.list_jobs_by_ids = AsyncMock(return_value=[])
     service.list_jobs = AsyncMock(return_value=[])
     return service
 
@@ -101,6 +104,8 @@ def mock_workspace_service():
     service.list_workspaces = AsyncMock(return_value=[])
     service.add_document = AsyncMock()
     service.remove_document = AsyncMock()
+    service.assign_job = AsyncMock()
+    service.remove_job = AsyncMock()
     service.create_rule = AsyncMock()
     service.exclude_document = AsyncMock()
     service.remove_exclusion = AsyncMock()
@@ -314,7 +319,9 @@ def sample_job():
         job_id="job-test-123",
         filename="test.pdf",
         status=JobStatus.PENDING,
-        created_at=datetime.utcnow()
+        created_at=datetime.utcnow(),
+        blob_path="jobs/job-test-123/original.pdf",
+        output_blob_path="jobs/job-test-123/redacted.pdf",
     )
 
 
@@ -343,7 +350,9 @@ def completed_job_with_suggestions(sample_job, sample_suggestion):
         filename="complete.pdf",
         status=JobStatus.COMPLETE,
         created_at=datetime.utcnow(),
-        suggestions=[sample_suggestion]
+        suggestions=[sample_suggestion],
+        blob_path="jobs/job-complete-123/original.pdf",
+        output_blob_path="jobs/job-complete-123/redacted.pdf",
     )
     return job
 

@@ -18,7 +18,9 @@ async def test_upload_document_creates_job_via_service(mock_job_service, mock_bl
         job_id="job-123",
         filename="test.pdf",
         status=JobStatus.PENDING,
-        created_at=now
+        created_at=now,
+        blob_path="jobs/job-123/original.pdf",
+        output_blob_path="jobs/job-123/redacted.pdf",
     )
     mock_job_service.create_job.return_value = created_job
 
@@ -43,7 +45,9 @@ async def test_upload_document_calls_blob_upload(mock_job_service, mock_blob_cli
         job_id="job-456",
         filename="document.pdf",
         status=JobStatus.PENDING,
-        created_at=now
+        created_at=now,
+        blob_path="jobs/job-456/original.pdf",
+        output_blob_path="jobs/job-456/redacted.pdf",
     )
     mock_job_service.create_job.return_value = created_job
 
@@ -66,7 +70,9 @@ async def test_get_job_returns_job_from_service(mock_job_service, mock_blob_clie
         job_id="job-789",
         filename="test.pdf",
         status=JobStatus.COMPLETE,
-        created_at=now
+        created_at=now,
+        blob_path="jobs/job-789/original.pdf",
+        output_blob_path="jobs/job-789/redacted.pdf",
     )
     mock_job_service.get_job.return_value = job
 
@@ -100,7 +106,9 @@ async def test_stream_endpoint_polls_service(mock_job_service, mock_blob_client,
     job = Job(
         job_id=job_id,
         status=JobStatus.COMPLETE,
-        created_at=now
+        created_at=now,
+        blob_path=f"jobs/{job_id}/original.pdf",
+        output_blob_path=f"jobs/{job_id}/redacted.pdf",
     )
     mock_job_service.get_job.return_value = job
 
@@ -180,9 +188,9 @@ async def test_run_job_updates_service_status(mock_job_service, mock_blob_client
         mock_pipeline.return_value = suggestions
         await _run_job(job_id, pdf_bytes, "instructions", mock_blob_client, mock_job_service)
 
-    # Verify service was called to update status and suggestions
+    # Verify service was called to update status and save suggestions in blob
     mock_job_service.update_status.assert_any_call(job_id, JobStatus.PROCESSING)
-    mock_job_service.update_suggestions.assert_called_once_with(job_id, 1)
+    mock_blob_client.save_suggestions.assert_called_once_with(job_id, suggestions)
     mock_job_service.update_status.assert_any_call(job_id, JobStatus.COMPLETE)
 
 
@@ -203,6 +211,33 @@ async def test_run_job_handles_pipeline_error(mock_job_service, mock_blob_client
         call[0][1] == JobStatus.FAILED and "Pipeline failed" in call[0][2]
         for call in calls
     )
+
+
+@pytest.mark.asyncio
+async def test_run_job_does_not_call_update_suggestions(mock_job_service, mock_blob_client):
+    from redactor.routes.jobs import _run_job
+    from redactor.models import Suggestion
+
+    suggestions = [
+        Suggestion(
+            id="s1",
+            job_id="job-xyz",
+            text="PII text",
+            category="PII",
+            reasoning="Contains SSN",
+            context="context",
+            page_num=1,
+            rects=[],
+            approved=False,
+            created_at=datetime.now(),
+        )
+    ]
+
+    with patch("redactor.routes.jobs.run_pipeline", new_callable=AsyncMock) as mock_pipeline:
+        mock_pipeline.return_value = suggestions
+        await _run_job("job-xyz", b"PDF", "instructions", mock_blob_client, mock_job_service)
+
+    assert not hasattr(mock_job_service, "update_suggestions") or mock_job_service.update_suggestions.await_count == 0
 
 
 @pytest.mark.asyncio

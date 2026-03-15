@@ -41,13 +41,25 @@ const workspaceDetailsRoute = new Route({
 
 const workspaceDesignerRoute = new Route({
   getParentRoute: () => rootRoute,
-  path: "/workspace/$workspaceId/designer",
+  path: "/workspace/$workspaceId/designer/$jobId",
+  component: DesignerRoute,
+});
+
+const workspaceDesignerNewRoute = new Route({
+  getParentRoute: () => rootRoute,
+  path: "/workspace/$workspaceId/designer/new",
   component: DesignerRoute,
 });
 
 const designerRoute = new Route({
   getParentRoute: () => rootRoute,
-  path: "/designer",
+  path: "/designer/$jobId",
+  component: DesignerRoute,
+});
+
+const designerNewRoute = new Route({
+  getParentRoute: () => rootRoute,
+  path: "/designer/new",
   component: DesignerRoute,
 });
 
@@ -63,8 +75,10 @@ const routeTree = rootRoute.addChildren([
   jobsRoute,                  // /jobs
   workspacesIndexRoute,       // /workspace
   workspaceDetailsRoute,      // /workspace/$workspaceId
-  workspaceDesignerRoute,     // /workspace/$workspaceId/designer
-  designerRoute,              // /designer
+  workspaceDesignerRoute,     // /workspace/$workspaceId/designer/$jobId
+  workspaceDesignerNewRoute,  // /workspace/$workspaceId/designer/new
+  designerRoute,              // /designer/$jobId
+  designerNewRoute,           // /designer/new
 ]);
 
 export const router = new Router({ routeTree });

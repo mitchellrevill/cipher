@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import redactor.services.agent_service as agent_service_module
 from redactor.services.agent_service import AgentService
 from redactor.services.job_service import JobService
+from redactor.services.session_service import SessionService
 from redactor.services.workspace_service import WorkspaceService
 
 
@@ -62,20 +63,35 @@ def mock_workspace_service():
 
 
 @pytest.fixture
-def agent_service(mock_oai_client, mock_job_service, mock_workspace_service):
-    """Create an AgentService instance with mocked dependencies."""
-    agent_service_module._sessions.clear()
+def mock_session_service():
+    store = {}
+    service = AsyncMock(spec=SessionService)
+
+    async def save(session_id, payload):
+        store[session_id] = payload
+
+    async def load(session_id):
+        return store.get(session_id, [])
+
+    service.save.side_effect = save
+    service.load.side_effect = load
+    service.store = store
+    return service
+
+
+@pytest.fixture
+def agent_service(mock_oai_client, mock_job_service, mock_workspace_service, mock_session_service):
     service = AgentService(
         oai_client=mock_oai_client,
         job_service=mock_job_service,
         workspace_service=mock_workspace_service,
+        session_service=mock_session_service,
     )
-    yield service
-    agent_service_module._sessions.clear()
+    return service
 
 
 @pytest.mark.asyncio
-async def test_create_session(agent_service, mock_oai_client):
+async def test_create_session(agent_service, mock_session_service):
     """Verify creating a framework-backed chat session."""
     session_id = await agent_service.create_session(job_id="job-1")
 
@@ -84,10 +100,11 @@ async def test_create_session(agent_service, mock_oai_client):
     assert session is not None
     assert session["job_id"] == "job-1"
     assert session["context_injected"] is False
+    assert session_id in mock_session_service.store
 
 
 @pytest.mark.asyncio
-async def test_get_session(agent_service, mock_oai_client):
+async def test_get_session(agent_service):
     """Verify retrieving a chat session."""
     session_id = await agent_service.create_session(job_id="job-1")
 
@@ -137,26 +154,28 @@ async def test_run_turn_second_message_skips_context_prefix(agent_service, mock_
 
 
 @pytest.mark.asyncio
-async def test_session_store_shared_across_instances(mock_oai_client, mock_job_service, mock_workspace_service):
-    """Verify module-level session store persists across AgentService instances."""
-    agent_service_module._sessions.clear()
+async def test_session_store_shared_across_instances(mock_oai_client, mock_job_service, mock_workspace_service, mock_session_service):
+    """Verify persisted session state can be loaded by a new AgentService instance."""
     service_one = AgentService(
         oai_client=mock_oai_client,
         job_service=mock_job_service,
         workspace_service=mock_workspace_service,
+        session_service=mock_session_service,
     )
     session_id = await service_one.create_session(job_id="job-1")
+    await service_one.run_turn(session_id=session_id, message="First turn")
 
     service_two = AgentService(
         oai_client=mock_oai_client,
         job_service=mock_job_service,
         workspace_service=mock_workspace_service,
+        session_service=mock_session_service,
     )
     session = await service_two.get_session(session_id)
 
     assert session is not None
     assert session["job_id"] == "job-1"
-    agent_service_module._sessions.clear()
+    assert session["messages"]
 
 
 @pytest.mark.asyncio
@@ -222,5 +241,10 @@ async def test_run_turn_stream_emits_tool_events(agent_service, mock_oai_client)
 
     assert any(event["type"] == "tool_start" and event["tool_name"] == "search_document" for event in events)
     assert any(event["type"] == "tool_result" and event["summary"] == "Found 2 results" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_agent_service_does_not_use_in_memory_sessions():
+    assert not hasattr(agent_service_module, "_sessions")
 
 

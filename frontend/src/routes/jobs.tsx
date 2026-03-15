@@ -5,7 +5,6 @@ import { Files, FolderKanban, FolderPlus, Loader2, WandSparkles } from "lucide-r
 import { redactionJobService } from "@/api/services";
 import { Button, PageHeading } from "@/components/ui";
 import { AddToWorkspaceDialog } from "@/components/workspace/add-to-workspace-dialog";
-import { setActiveJobId } from "@/lib/recent-jobs";
 import { cn } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -26,8 +25,7 @@ export default function JobsRoute() {
   });
 
   const handleOpen = (jobId: string) => {
-    setActiveJobId(jobId);
-    void navigate({ to: "/designer" });
+    void navigate({ to: "/designer/$jobId", params: { jobId } });
   };
 
   const filterToggle = (
@@ -112,10 +110,10 @@ export default function JobsRoute() {
                   {job.created_at ? (
                     <span>{new Date(job.created_at).toLocaleString()}</span>
                   ) : null}
-                  {job.suggestions_count > 0 ? (
+                  {job.suggestions.length > 0 ? (
                     <>
                       <span>·</span>
-                      <span>{job.suggestions_count} suggestions</span>
+                      <span>{job.suggestions.length} suggestions</span>
                     </>
                   ) : null}
                   {job.workspace_id ? (

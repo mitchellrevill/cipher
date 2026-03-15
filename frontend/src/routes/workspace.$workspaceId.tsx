@@ -10,7 +10,6 @@ import { Badge, Button, PageHeading } from "@/components/ui";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRecentJobs } from "@/hooks/useRecentJobs";
-import { setActiveJobId } from "@/lib/recent-jobs";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import { toast } from "sonner";
 
@@ -49,11 +48,19 @@ export default function WorkspaceDetailsRoute() {
   }, [recentJobs, workspace]);
 
   const handleOpenStudio = (jobId?: string | null) => {
-    if (jobId) {
-      setActiveJobId(jobId);
-    }
     setSelectedWorkspaceId(workspaceId);
-    void navigate({ to: "/workspace/$workspaceId/designer", params: { workspaceId } });
+    if (jobId) {
+      void navigate({
+        to: "/workspace/$workspaceId/designer/$jobId",
+        params: { workspaceId, jobId },
+      });
+      return;
+    }
+
+    void navigate({
+      to: "/workspace/$workspaceId/designer/new",
+      params: { workspaceId },
+    });
   };
 
   if (isLoading) {
@@ -111,7 +118,11 @@ export default function WorkspaceDetailsRoute() {
                           <div className="min-w-0">
                             <div className="truncate font-medium text-foreground">{document.filename ?? document.id}</div>
                             <div className="mt-1 text-xs text-muted-foreground">
-                              {document.excluded ? `Excluded · ${document.reason ?? "No reason"}` : `${document.suggestions_count ?? 0} suggestions`}
+                              {document.excluded
+                                ? `Excluded · ${document.reason ?? "No reason"}`
+                                : [document.status, document.page_count ? `${document.page_count} pages` : null]
+                                    .filter(Boolean)
+                                    .join(" · ") || "Ready"}
                             </div>
                           </div>
                           <div className="flex flex-wrap gap-2">

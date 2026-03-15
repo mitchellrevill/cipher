@@ -47,6 +47,7 @@ export function AddToWorkspaceDialog({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["workspaces"] }),
         queryClient.invalidateQueries({ queryKey: ["workspace", selectedWorkspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["jobs"] }),
       ]);
       toast.success("Added document to workspace.");
       onAdded?.(selectedWorkspaceId!);

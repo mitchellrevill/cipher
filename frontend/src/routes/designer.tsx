@@ -215,15 +215,13 @@ export default function DocumentsRoute() {
   const activeWorkspace = workspaceQuery.data ?? null;
 
   useEffect(() => {
-    if (activeJob?.workspace_id && activeJob.workspace_id !== selectedWorkspaceId) {
-      setSelectedWorkspaceId(activeJob.workspace_id);
-      return;
-    }
-
-    if (!selectedWorkspaceId && workspacesQuery.data && workspacesQuery.data.length === 1) {
-      setSelectedWorkspaceId(workspacesQuery.data[0].id);
-    }
-  }, [activeJob?.workspace_id, selectedWorkspaceId, workspacesQuery.data]);
+    // When a URL workspace is set (e.g. /workspace/$id/designer), let it take precedence.
+    if (urlWorkspaceId) return;
+    // Don't touch workspace selection while no job is loaded.
+    if (!activeJob) return;
+    // Sync workspace selection to the active job's assigned workspace (or clear it).
+    setSelectedWorkspaceId(activeJob.workspace_id ?? null);
+  }, [activeJob?.job_id, activeJob?.workspace_id, urlWorkspaceId, setSelectedWorkspaceId]);
 
   // Initialize page processing status tracking
   const {
@@ -523,6 +521,14 @@ export default function DocumentsRoute() {
       toast.success("All suggestions were already approved.");
     },
     onError: (error) => toast.error(getApiErrorMessage(error, "Unable to approve all suggestions.")),
+  });
+
+  const deleteSuggestionMutation = useMutation({
+    mutationFn: (suggestionId: string) => redactionJobService.deleteSuggestion(selectedJobId!, suggestionId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["redaction-job", selectedJobId] });
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error, "Failed to delete suggestion.")),
   });
 
   const manualRedactionMutation = useMutation({
@@ -1298,6 +1304,7 @@ export default function DocumentsRoute() {
                 selectedSuggestionId,
                 onSuggestionSelect: handleSuggestionSelect,
                 onApprovalChange: (id, approved) => approvalMutation.mutate({ suggestionId: id, approved }),
+                onDelete: (suggestionId) => deleteSuggestionMutation.mutate(suggestionId),
                 getSuggestionPageLabel,
                 isLoading: jobQuery.isLoading,
                 hasJobData: !!activeJob,

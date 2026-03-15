@@ -7,6 +7,7 @@ import logging
 from typing import Any, AsyncIterator, Optional
 
 from redactor.agent.tools.search import DocumentTools
+from redactor.agent.tools.suggestions import SuggestionTools
 from redactor.agent.tools.workspace import WorkspaceTools
 from redactor.agent.knowledge_base import KnowledgeBase
 from redactor.services.job_service import JobService
@@ -26,7 +27,11 @@ SYSTEM_PROMPT = (
     "- Create one rule per distinct term or pattern. Never combine multiple terms into a single rule using regex alternation (e.g. do NOT use 'Spouse|Partner|Husband|Wife'). "
     "Each term must be its own separate rule with its own create_rule call.\n"
     "- After creating each rule, immediately call apply_rule with the new rule's ID to apply it across all workspace documents. "
-    "Do not wait or ask for confirmation — always apply the rule right after creating it."
+    "Do not wait or ask for confirmation — always apply the rule right after creating it.\n\n"
+    "Bulk approval guidelines:\n"
+    "- Always call preview_bulk_approval before apply_bulk_approval. Present the preview "
+    "results to the user and wait for explicit confirmation before applying.\n"
+    "- When applying bulk changes, use the exact same filter arguments used in the preview."
 )
 
 _sessions: dict[str, dict[str, Any]] = {}
@@ -75,6 +80,11 @@ class AgentService:
             rule_engine=rule_engine,
             event_emitter=self._emit_tool_event,
         )
+        suggestion_tools = SuggestionTools(
+            job_service=job_service,
+            redaction_service=redaction_service,
+            event_emitter=self._emit_tool_event,
+        )
 
         self.agent = oai_client.as_agent(
             name="RedactionAssistant",
@@ -93,6 +103,13 @@ class AgentService:
                 workspace_tools.add_document_to_workspace,
                 workspace_tools.remove_document_from_workspace,
                 workspace_tools.remove_exclusion,
+                suggestion_tools.approve_suggestion,
+                suggestion_tools.delete_suggestion,
+                suggestion_tools.create_suggestion,
+                workspace_tools.search_workspace,
+                workspace_tools.preview_bulk_approval,
+                workspace_tools.apply_bulk_approval,
+                workspace_tools.bulk_create_suggestions,
             ],
         )
 

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Files, FolderKanban, Loader2, WandSparkles } from "lucide-react";
+import { Files, FolderKanban, FolderPlus, Loader2, WandSparkles } from "lucide-react";
 import { redactionJobService } from "@/api/services";
-import { Badge, Button, PageHeading } from "@/components/ui";
+import { Button, PageHeading } from "@/components/ui";
+import { AddToWorkspaceDialog } from "@/components/workspace/add-to-workspace-dialog";
 import { setActiveJobId } from "@/lib/recent-jobs";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ const STATUS_STYLES: Record<string, string> = {
 export default function JobsRoute() {
   const navigate = useNavigate();
   const [unassignedOnly, setUnassignedOnly] = useState(false);
+  const [addWorkspaceJobId, setAddWorkspaceJobId] = useState<string | null>(null);
 
   const { data: jobs, isLoading } = useQuery({
     queryKey: ["jobs", { unassigned: unassignedOnly }],
@@ -58,6 +60,7 @@ export default function JobsRoute() {
   );
 
   return (
+    <>
     <div className="flex h-full flex-col overflow-hidden">
       <PageHeading
         title="All Jobs"
@@ -126,7 +129,14 @@ export default function JobsRoute() {
                   ) : (
                     <>
                       <span>·</span>
-                      <span className="text-muted-foreground/60">Unassigned</span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setAddWorkspaceJobId(job.job_id); }}
+                        className="flex items-center gap-1 text-muted-foreground/60 transition-colors hover:text-primary"
+                      >
+                        <FolderPlus className="h-3 w-3" />
+                        Add to workspace
+                      </button>
                     </>
                   )}
                 </div>
@@ -147,5 +157,15 @@ export default function JobsRoute() {
       )}
       </div>
     </div>
+
+      {addWorkspaceJobId && (
+        <AddToWorkspaceDialog
+          jobId={addWorkspaceJobId}
+          jobFilename={jobs?.find((j) => j.job_id === addWorkspaceJobId)?.filename}
+          open={true}
+          onOpenChange={(open) => { if (!open) setAddWorkspaceJobId(null); }}
+        />
+      )}
+    </>
   );
 }

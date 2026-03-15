@@ -173,6 +173,41 @@ class JobService:
             body={"suggestions_count": suggestions_count}
         )
 
+    async def update_workspace_id(self, job_id: str, workspace_id: Optional[str]) -> None:
+        """
+        Update the workspace_id field on a job document.
+
+        Args:
+            job_id: Job identifier
+            workspace_id: Workspace ID to assign, or None to clear
+        """
+        self.cosmos_client.update_item(
+            item=job_id,
+            body={"workspace_id": workspace_id},
+        )
+
+    async def list_jobs_by_ids(self, job_ids: List[str]) -> List[Job]:
+        """
+        Fetch a batch of jobs by their IDs.
+
+        Args:
+            job_ids: List of job IDs to fetch
+
+        Returns:
+            List of matching jobs (without suggestions loaded)
+        """
+        if not job_ids:
+            return []
+        placeholders = ", ".join(f"'{jid}'" for jid in job_ids)
+        query = f"SELECT * FROM c WHERE c.job_id IN ({placeholders})"
+        results = self.cosmos_client.query_items(
+            query=query,
+            enable_cross_partition_query=True,
+        )
+        if results is None:
+            return []
+        return [self._doc_to_job(doc) for doc in results]
+
     async def delete_job(self, job_id: str):
         """
         Soft delete a job (mark as archived).

@@ -56,6 +56,7 @@ export interface SuggestionsSection {
 	selectedSuggestionId: string | null;
 	onSuggestionSelect: (s: Suggestion) => void;
 	onApprovalChange: (id: string, approved: boolean) => void;
+	onDelete: (suggestionId: string) => void;
 	getSuggestionPageLabel: (s: Suggestion) => string;
 	isLoading: boolean;
 	hasJobData: boolean;
@@ -79,16 +80,23 @@ interface AgentChatPanelProps {
 
 const TOOL_ICON_MAP: Record<string, typeof Search> = {
 	search_document: Search,
+	search_workspace: Search,
 	get_document_summary: FileSearch,
 	list_document_suggestions: MessageSquareText,
 	get_suggestion_details: MessageSquareText,
 	get_workspace_state: FolderKanban,
 	create_rule: WandSparkles,
+	create_suggestion: FilePlus2,
 	apply_rule: Sparkles,
+	approve_suggestion: CheckCircle2,
+	preview_bulk_approval: CheckCircle2,
+	apply_bulk_approval: Sparkles,
+	bulk_create_suggestions: FilePlus2,
 	exclude_document: ShieldBan,
 	list_workspace_rules: FolderKanban,
 	list_workspace_exclusions: ShieldBan,
 	add_document_to_workspace: FilePlus2,
+	delete_suggestion: Trash2,
 	remove_document_from_workspace: Trash2,
 	remove_exclusion: CheckCircle2,
 };
@@ -316,12 +324,19 @@ export function AgentChatPanel({
 			          suggestionsSection.suggestions.map((suggestion) => {
 			            const isSelected = suggestionsSection.selectedSuggestionId === suggestion.id;
 			            return (
-			              <button
+			              <div
 			                key={suggestion.id}
-			                type="button"
 			                onClick={() => suggestionsSection.onSuggestionSelect(suggestion)}
+			                onKeyDown={(event) => {
+			                  if (event.key === "Enter" || event.key === " ") {
+			                    event.preventDefault();
+			                    suggestionsSection.onSuggestionSelect(suggestion);
+			                  }
+			                }}
+			                role="button"
+			                tabIndex={0}
 			                className={cn(
-			                  "w-full rounded-xl border px-2.5 py-2 text-left text-[11px] transition-colors",
+			                  "group w-full rounded-xl border px-2.5 py-2 text-left text-[11px] transition-colors",
 			                  isSelected
 			                    ? "border-primary/30 bg-primary/5"
 			                    : "border-border/60 hover:bg-muted/40"
@@ -355,8 +370,19 @@ export function AgentChatPanel({
 			                      </div>
 			                    ) : null}
 			                  </div>
+			                  <button
+			                    type="button"
+			                    onClick={(event) => {
+			                      event.stopPropagation();
+			                      suggestionsSection.onDelete(suggestion.id);
+			                    }}
+			                    className="ml-auto flex-shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+			                    aria-label="Delete suggestion"
+			                  >
+			                    <Trash2 className="h-3 w-3" />
+			                  </button>
 			                </div>
-			              </button>
+			              </div>
 			            );
 			          })
 			        )}

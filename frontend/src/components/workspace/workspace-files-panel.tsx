@@ -72,6 +72,7 @@ function DraggableFileItem({
         </button>
         <button
           type="button"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
             onAddToChat();

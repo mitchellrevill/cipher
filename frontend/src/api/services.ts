@@ -217,6 +217,10 @@ class RedactionJobService {
     return response.data;
   }
 
+  async deleteSuggestion(jobId: string, suggestionId: string): Promise<void> {
+    await api.delete(`/api/jobs/${jobId}/suggestions/${suggestionId}`);
+  }
+
   async applyRedactions(jobId: string): Promise<ApplyRedactionsResponse> {
     const response = await api.post<ApplyRedactionsResponse>(`/api/jobs/${jobId}/redactions/apply`);
     return response.data;

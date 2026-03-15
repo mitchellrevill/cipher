@@ -68,7 +68,7 @@ export function WorkspaceChatHeader({
           Exclusions {exclusionsCount}
         </Button>
         <Button type="button" variant="ghost" size="sm" asChild>
-          <a href={`/workspaces/${workspace.id}`}>
+          <a href={`/workspace/${workspace.id}`}>
             Open workspace
             <ArrowUpRight className="h-4 w-4" />
           </a>

@@ -76,6 +76,7 @@ const baseSuggestionsSection = {
   selectedSuggestionId: null,
   onSuggestionSelect: vi.fn(),
   onApprovalChange: vi.fn(),
+  onDelete: vi.fn(),
   getSuggestionPageLabel: vi.fn().mockReturnValue("p.1"),
   isLoading: false,
   hasJobData: true,
@@ -208,5 +209,46 @@ describe("AgentChatPanel suggestionsSection", () => {
     expect(screen.getByText("John Smith")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /toggle suggestions/i }));
     expect(screen.queryByText("John Smith")).not.toBeInTheDocument();
+  });
+});
+
+describe("AgentChatPanel delete suggestion", () => {
+  it("renders a delete button for each suggestion row", () => {
+    const onDelete = vi.fn();
+
+    render(
+      <DndContext>
+        <AgentChatPanel
+          {...baseProps}
+          suggestionsSection={{
+            ...baseSuggestionsSection,
+            suggestions: [makeSuggestion()],
+            onDelete,
+          }}
+        />
+      </DndContext>
+    );
+
+    expect(screen.getByRole("button", { name: /delete suggestion/i })).toBeInTheDocument();
+  });
+
+  it("calls onDelete with suggestion id when delete button is clicked", () => {
+    const onDelete = vi.fn();
+
+    render(
+      <DndContext>
+        <AgentChatPanel
+          {...baseProps}
+          suggestionsSection={{
+            ...baseSuggestionsSection,
+            suggestions: [makeSuggestion({ id: "s-abc" })],
+            onDelete,
+          }}
+        />
+      </DndContext>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /delete suggestion/i }));
+    expect(onDelete).toHaveBeenCalledWith("s-abc");
   });
 });

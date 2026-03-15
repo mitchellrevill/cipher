@@ -203,3 +203,52 @@ async def test_run_job_handles_pipeline_error(mock_job_service, mock_blob_client
         call[0][1] == JobStatus.FAILED and "Pipeline failed" in call[0][2]
         for call in calls
     )
+
+
+@pytest.mark.asyncio
+async def test_delete_suggestion_returns_204(test_app, mock_job_service, mock_redaction_service, sample_suggestion):
+    mock_job_service.get_job.return_value = Job(
+        job_id="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        status=JobStatus.COMPLETE,
+        suggestions=[sample_suggestion],
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+        response = await client.delete("/api/jobs/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/suggestions/sugg-1")
+
+    assert response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_delete_suggestion_returns_400_for_invalid_uuid(test_app):
+    async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+        response = await client.delete("/api/jobs/not-a-uuid/suggestions/sugg-1")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid job ID"
+
+
+@pytest.mark.asyncio
+async def test_delete_suggestion_returns_404_for_unknown_job(test_app, mock_job_service):
+    mock_job_service.get_job.return_value = None
+
+    async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+        response = await client.delete("/api/jobs/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/suggestions/sugg-1")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Job not found"
+
+
+@pytest.mark.asyncio
+async def test_delete_suggestion_returns_404_for_unknown_suggestion(test_app, mock_job_service):
+    mock_job_service.get_job.return_value = Job(
+        job_id="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        status=JobStatus.COMPLETE,
+        suggestions=[],
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+        response = await client.delete("/api/jobs/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/suggestions/no-such")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Suggestion not found"

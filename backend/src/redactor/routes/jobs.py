@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from redactor.config import get_settings
 from redactor.models import Job, JobStatus, PageStatusEvent, SuggestionFoundEvent
 from redactor.services.job_service import JobService
+from redactor.services.redaction_service import RedactionService
 from redactor.services.workspace_service import WorkspaceService
 from redactor.storage.blob import BlobStorageClient, get_blob_storage
 from redactor.pipeline.orchestrator import run_pipeline
@@ -49,6 +50,11 @@ async def get_workspace_service(request: Request) -> WorkspaceService:
     return request.app.container.services.workspace_service()
 
 
+async def get_redaction_service(request: Request) -> RedactionService:
+    """Get RedactionService from app container via dependency injection."""
+    return request.app.container.services.redaction_service()
+
+
 async def _run_job(
     job_id: str,
     pdf_bytes: bytes,
@@ -77,6 +83,27 @@ async def list_jobs(
 ):
     """List jobs, optionally filtered to those not assigned to a workspace."""
     return await job_service.list_jobs(skip=skip, limit=limit, unassigned_only=unassigned)
+
+
+@router.delete("/{job_id}/suggestions/{suggestion_id}", status_code=204)
+async def delete_suggestion(
+    job_id: str,
+    suggestion_id: str,
+    job_service: Annotated[JobService, Depends(get_job_service)],
+    redaction_service: Annotated[RedactionService, Depends(get_redaction_service)],
+):
+    """Delete a suggestion from a job."""
+    if not _validate_job_id(job_id):
+        raise HTTPException(status_code=400, detail="Invalid job ID")
+
+    job = await job_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if not any(suggestion.id == suggestion_id for suggestion in job.suggestions):
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+
+    await redaction_service.delete_suggestion(job_id, suggestion_id)
 
 
 @router.post("", status_code=202)

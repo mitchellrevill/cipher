@@ -46,7 +46,7 @@ async def test_get_job_returns_job_for_existing(mock_job_service, mock_blob_clie
     """Verify GET /jobs/{id} returns job when found."""
     test_job_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     now = datetime.now()
-    job = Job(job_id=test_job_id, status=JobStatus.PENDING, created_at=now)
+    job = Job(job_id=test_job_id, status=JobStatus.PENDING, created_at=now, user_id="test-user-123")
     mock_job_service.get_job.return_value = job
 
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:

@@ -116,7 +116,52 @@ make down  # stops the stack
 ## Environment variables
 
 - The backend reads `backend/.env` (copy from `backend/.env.example`).
+- The frontend reads `frontend/.env` (copy from `frontend/.env.example` if you want a clean local template).
 - Do NOT commit real secrets to version control. Use a secret store or Azure App Settings in cloud deployments.
+
+## Authentication setup (MSAL / Microsoft Entra ID)
+
+The app now protects all frontend routes and backend API endpoints with Microsoft Entra ID tokens.
+
+### Frontend auth variables
+
+Set these in `frontend/.env`:
+
+```env
+VITE_MSAL_CLIENT_ID=<your-client-id>
+VITE_MSAL_AUTHORITY=https://login.microsoftonline.com/<your-tenant-id>
+VITE_MSAL_REDIRECT_URI=http://localhost:3000
+```
+
+### Backend auth variables
+
+Set these in `backend/.env`:
+
+```env
+AZURE_AD_TENANT_ID=<your-tenant-id>
+AZURE_AD_CLIENT_ID=<your-client-id>
+ENV=development
+DEV_BYPASS=true
+```
+
+### Required app registration setup
+
+In Microsoft Entra ID / Azure AD, make sure your app registration includes:
+
+- an exposed API scope: `api://<CLIENT_ID>/access_as_user`
+- SPA redirect URIs for your local frontend URL and any deployed frontend URL
+- delegated permissions such as `openid`, `profile`, and `email`
+
+### Local dev bypass
+
+For local-only development, the app supports a bypass login:
+
+- frontend dev mode accepts any credentials on the login page
+- backend accepts `Bearer dev-token-bypass` only when both:
+	- `ENV=development`
+	- `DEV_BYPASS=true`
+
+If `DEV_BYPASS=true` is set outside development, backend startup will fail intentionally.
 
 ## Tests
 

@@ -64,14 +64,16 @@ class JobService:
         skip: int = 0,
         limit: int = 50,
         unassigned_only: bool = False,
+        user_id: Optional[str] = None,
     ) -> list[Job]:
+        filters: list[str] = []
+        if user_id:
+            filters.append(f"c.user_id = '{user_id}'")
         if unassigned_only:
-            query = (
-                "SELECT * FROM c WHERE (NOT IS_DEFINED(c.workspace_id) OR IS_NULL(c.workspace_id) OR c.workspace_id = '') "
-                f"ORDER BY c.created_at DESC OFFSET {skip} LIMIT {limit}"
-            )
-        else:
-            query = f"SELECT * FROM c ORDER BY c.created_at DESC OFFSET {skip} LIMIT {limit}"
+            filters.append("(NOT IS_DEFINED(c.workspace_id) OR IS_NULL(c.workspace_id) OR c.workspace_id = '')")
+
+        where_clause = f" WHERE {' AND '.join(filters)}" if filters else ""
+        query = f"SELECT * FROM c{where_clause} ORDER BY c.created_at DESC OFFSET {skip} LIMIT {limit}"
 
         results = self.cosmos_container.query_items(
             query=query,

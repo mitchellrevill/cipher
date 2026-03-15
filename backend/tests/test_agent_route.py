@@ -13,7 +13,7 @@ from redactor.models import Job, JobStatus
 @pytest.mark.asyncio
 async def test_chat_returns_response(mock_agent_service, test_app):
     """Verify POST /chat returns response with correct format."""
-    job = Job(job_id="job-agent", filename="test.pdf", status=JobStatus.COMPLETE)
+    job = Job(job_id="job-agent", filename="test.pdf", status=JobStatus.COMPLETE, user_id="test-user-123")
     mock_agent_service.job_service.get_job.return_value = job
 
     mock_agent_service.create_session.return_value = "sess-abc"
@@ -52,7 +52,7 @@ async def test_chat_returns_404_for_unknown_job(mock_agent_service, test_app):
 
 @pytest.mark.asyncio
 async def test_chat_stream_returns_sse_events(mock_agent_service, test_app):
-    job = Job(job_id="job-agent", filename="test.pdf", status=JobStatus.COMPLETE)
+    job = Job(job_id="job-agent", filename="test.pdf", status=JobStatus.COMPLETE, user_id="test-user-123")
     mock_agent_service.job_service.get_job.return_value = job
     mock_agent_service.create_session.return_value = "sess-stream"
 

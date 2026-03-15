@@ -34,6 +34,29 @@ class WorkspaceService:
         }
         return self.workspaces_container.create_item(body=workspace)
 
+    async def update_workspace(
+        self,
+        workspace_id: str,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        workspace = await self._require_workspace(workspace_id)
+        if name is not None:
+            workspace["name"] = name
+        if description is not None:
+            workspace["description"] = description
+        workspace["updated_at"] = datetime.utcnow().isoformat()
+        return self._replace_workspace(workspace_id, workspace)
+
+    async def delete_workspace(self, workspace_id: str) -> None:
+        workspace = await self._require_workspace(workspace_id)
+        for rule_id in list(workspace.get("rule_ids", [])):
+            self._delete_item(self.rules_container, rule_id, workspace_id)
+        for exclusion_id in list(workspace.get("exclusion_ids", [])):
+            self._delete_item(self.exclusions_container, exclusion_id, workspace_id)
+        self._delete_item(self.workspaces_container, workspace_id, workspace_id, workspace)
+
     async def get_workspace(self, workspace_id: str) -> dict[str, Any] | None:
         try:
             workspace = self.workspaces_container.read_item(item=workspace_id, partition_key=workspace_id)
@@ -151,6 +174,15 @@ class WorkspaceService:
             parameters=[{"name": "@workspace_id", "value": workspace_id}],
         )
 
+    async def remove_rule(self, workspace_id: str, rule_id: str) -> dict[str, Any]:
+        workspace = await self._require_workspace(workspace_id)
+        if rule_id in workspace["rule_ids"]:
+            workspace["rule_ids"].remove(rule_id)
+            workspace["updated_at"] = datetime.utcnow().isoformat()
+            self._replace_workspace(workspace_id, workspace)
+        self._delete_item(self.rules_container, rule_id, workspace_id)
+        return await self._require_workspace(workspace_id)
+
     async def exclude_document(self, workspace_id: str, document_id: str, reason: str) -> dict[str, Any]:
         workspace = await self._require_workspace(workspace_id)
         now = datetime.utcnow().isoformat()
@@ -247,6 +279,32 @@ class WorkspaceService:
                         body=workspace,
                         partition_key=partition_key,
                     )
+                except TypeError:
+                    raise
+                except Exception:
+                    continue
+            raise first_error
+
+    def _delete_item(
+        self,
+        container: Any,
+        item_id: str,
+        default_partition_key: str,
+        workspace: dict[str, Any] | None = None,
+    ) -> None:
+        try:
+            container.delete_item(item=item_id, partition_key=default_partition_key)
+            return
+        except TypeError:
+            raise
+        except Exception as first_error:
+            candidates = [default_partition_key]
+            if workspace:
+                candidates.extend(self._workspace_partition_key_candidates(workspace))
+            for partition_key in candidates:
+                try:
+                    container.delete_item(item=item_id, partition_key=partition_key)
+                    return
                 except TypeError:
                     raise
                 except Exception:

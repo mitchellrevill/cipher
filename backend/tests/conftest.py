@@ -12,6 +12,7 @@ from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, MagicMock
 from unittest.mock import patch
 
+from redactor.auth import CurrentUser, get_current_user
 from redactor.containers.app import AppContainer
 from redactor.config import get_settings
 from redactor.models import Job, JobStatus, Suggestion, RedactionRect
@@ -99,17 +100,25 @@ def mock_workspace_service():
     """Create a mock WorkspaceService for integration tests."""
     service = MagicMock(spec=WorkspaceService)
     service.create_workspace = AsyncMock()
-    service.get_workspace = AsyncMock()
-    service.get_workspace_state = AsyncMock()
+    service.get_workspace = AsyncMock(return_value={"id": "ws_test", "user_id": "test-user-123", "document_ids": []})
+    service.get_workspace_state = AsyncMock(return_value={"id": "ws_test", "user_id": "test-user-123", "documents": [], "rules": [], "exclusions": []})
     service.list_workspaces = AsyncMock(return_value=[])
     service.add_document = AsyncMock()
     service.remove_document = AsyncMock()
     service.assign_job = AsyncMock()
     service.remove_job = AsyncMock()
+    service.update_workspace = AsyncMock()
+    service.delete_workspace = AsyncMock()
     service.create_rule = AsyncMock()
+    service.remove_rule = AsyncMock()
     service.exclude_document = AsyncMock()
     service.remove_exclusion = AsyncMock()
     return service
+
+
+@pytest.fixture
+def test_current_user() -> CurrentUser:
+    return CurrentUser(user_id="test-user-123", email="test@example.com", name="Test User")
 
 
 # ============================================================================
@@ -160,7 +169,7 @@ def mock_container(mock_job_service, mock_redaction_service, mock_agent_service,
 # ============================================================================
 
 @pytest.fixture
-def test_app(mock_container, mock_blob_client):
+def test_app(mock_container, mock_blob_client, test_current_user):
     """
     Create a test FastAPI application with all routes and mocked dependencies.
 
@@ -194,6 +203,7 @@ def test_app(mock_container, mock_blob_client):
     app.include_router(redactions.router, prefix="/api/jobs/{job_id}/redactions", tags=["redactions"])
     app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
     app.include_router(workspaces.router, prefix="/api/workspaces", tags=["workspaces"])
+    app.dependency_overrides[get_current_user] = lambda: test_current_user
 
     with (
         patch("redactor.routes.jobs._get_blob", return_value=mock_blob_client),
@@ -203,7 +213,7 @@ def test_app(mock_container, mock_blob_client):
 
 
 @pytest.fixture
-def test_app_jobs_only(mock_container, mock_blob_client):
+def test_app_jobs_only(mock_container, mock_blob_client, test_current_user):
     """
     Create a test FastAPI application with only the jobs router.
 
@@ -230,13 +240,14 @@ def test_app_jobs_only(mock_container, mock_blob_client):
     )
 
     app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
+    app.dependency_overrides[get_current_user] = lambda: test_current_user
 
     with patch("redactor.routes.jobs._get_blob", return_value=mock_blob_client):
         yield app
 
 
 @pytest.fixture
-def test_app_redactions_only(mock_container):
+def test_app_redactions_only(mock_container, test_current_user):
     """
     Create a test FastAPI application with only the redactions router.
 
@@ -263,11 +274,12 @@ def test_app_redactions_only(mock_container):
     )
 
     app.include_router(redactions.router, prefix="/api/jobs/{job_id}/redactions", tags=["redactions"])
+    app.dependency_overrides[get_current_user] = lambda: test_current_user
     return app
 
 
 @pytest.fixture
-def test_app_agent_only(mock_container):
+def test_app_agent_only(mock_container, test_current_user):
     """
     Create a test FastAPI application with only the agent router.
 
@@ -294,6 +306,7 @@ def test_app_agent_only(mock_container):
     )
 
     app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
+    app.dependency_overrides[get_current_user] = lambda: test_current_user
     return app
 
 
@@ -320,6 +333,7 @@ def sample_job():
         filename="test.pdf",
         status=JobStatus.PENDING,
         created_at=datetime.utcnow(),
+        user_id="test-user-123",
         blob_path="jobs/job-test-123/original.pdf",
         output_blob_path="jobs/job-test-123/redacted.pdf",
     )
@@ -350,6 +364,7 @@ def completed_job_with_suggestions(sample_job, sample_suggestion):
         filename="complete.pdf",
         status=JobStatus.COMPLETE,
         created_at=datetime.utcnow(),
+        user_id="test-user-123",
         suggestions=[sample_suggestion],
         blob_path="jobs/job-complete-123/original.pdf",
         output_blob_path="jobs/job-complete-123/redacted.pdf",

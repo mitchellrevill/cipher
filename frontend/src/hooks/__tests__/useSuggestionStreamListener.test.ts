@@ -1,17 +1,26 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { vi } from "vitest";
+import * as msalAuth from "@/auth/msal";
 import { useSuggestionStreamListener } from "../useSuggestionStreamListener";
 
-// Mock EventSource
-global.EventSource = vi.fn(() => ({
-  addEventListener: vi.fn(),
-  close: vi.fn(),
-  onopen: null,
-})) as any;
+Object.defineProperty(globalThis, "fetch", {
+  value: vi.fn(),
+  writable: true,
+});
+
+vi.spyOn(msalAuth, "getAuthorizationHeaders").mockResolvedValue({ Authorization: "Bearer test-token" });
 
 describe("useSuggestionStreamListener", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
+        }),
+      },
+    });
   });
 
   it("initializes with empty suggestions and disconnected state", () => {
@@ -28,21 +37,17 @@ describe("useSuggestionStreamListener", () => {
     expect(typeof result.current.clearSuggestions).toBe("function");
   });
 
-  it("closes EventSource when jobId is null", () => {
-    const mockEventSource = {
-      addEventListener: vi.fn(),
-      close: vi.fn(),
-      onopen: null,
-    };
-    (global.EventSource as any).mockReturnValue(mockEventSource);
-
+  it("aborts the stream when jobId becomes null", async () => {
+    const abortSpy = vi.spyOn(AbortController.prototype, "abort");
     const { rerender } = renderHook(
       ({ jobId }) => useSuggestionStreamListener(jobId),
       { initialProps: { jobId: "job-123" } }
     );
 
-    rerender({ jobId: null });
+    await act(async () => {
+      rerender({ jobId: null });
+    });
 
-    expect(mockEventSource.close).toHaveBeenCalled();
+    expect(abortSpy).toHaveBeenCalled();
   });
 });

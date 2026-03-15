@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     # Feature flags
     enable_pii_service: bool = True
 
+    # Authentication
+    AZURE_AD_TENANT_ID: str = ""
+    AZURE_AD_CLIENT_ID: str = ""
+    DEV_BYPASS: bool = False
+    ENV: str = "production"
+
     # App
     # Read raw env into a string field to avoid pydantic_settings trying to
     # json-decode a complex type too early (which raises JSONDecodeError).
@@ -83,6 +89,15 @@ class Settings(BaseSettings):
         except Exception:
             pass
         return [item.strip() for item in raw.split(",") if item.strip()]
+
+    @model_validator(mode="after")
+    def validate_dev_bypass(self) -> "Settings":
+        if self.DEV_BYPASS and self.ENV != "development":
+            raise ValueError(
+                "DEV_BYPASS=true is only allowed when ENV=development. "
+                "Remove DEV_BYPASS or set ENV=development."
+            )
+        return self
 
 @lru_cache
 def get_settings() -> Settings:

@@ -2,7 +2,8 @@
  * TanStack Router configuration and routes
  */
 
-import { RootRoute, Route, Router } from "@tanstack/react-router";
+import { redirect, RootRoute, Route, Router } from "@tanstack/react-router";
+import { useAuthStore } from "@/store";
 import RootLayout from "@/routes/RootLayout";
 import IndexRoute from "@/routes/index";
 import LoginRoute from "@/routes/login";
@@ -13,6 +14,20 @@ import WorkspaceDetailsRoute from "@/routes/workspace.$workspaceId";
 
 const rootRoute = new RootRoute({
   component: RootLayout,
+  beforeLoad: ({ location }) => {
+    if (location.pathname === "/login") {
+      return;
+    }
+
+    if (!useAuthStore.getState().isAuthenticated) {
+      throw redirect({
+        to: "/login",
+        search: {
+          redirect: location.href,
+        },
+      });
+    }
+  },
 });
 
 const indexRoute = new Route({

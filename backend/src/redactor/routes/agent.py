@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, Annotated
+from redactor.auth import CurrentUser, get_current_user
 from redactor.services.agent_service import AgentService
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 class ChatRequest(BaseModel):
     job_id: str
@@ -20,17 +21,23 @@ async def get_agent_service(request: Request) -> AgentService:
     return request.app.container.services.agent_service()
 
 
+async def _require_owned_job(job_id: str, agent_service: AgentService, current_user: CurrentUser):
+    job = await agent_service.job_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return job
+
+
 @router.post("/chat")
 async def chat(
     request: ChatRequest,
-    agent_service: Annotated[AgentService, Depends(get_agent_service)] = None
+    agent_service: Annotated[AgentService, Depends(get_agent_service)] = None,
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """Chat with AI assistant about document redaction."""
-
-    # Verify job exists by checking if we can get job context from service
-    job = await agent_service.job_service.get_job(request.job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    await _require_owned_job(request.job_id, agent_service, current_user)
 
     # Create or get session
     if not request.session_id:
@@ -42,6 +49,11 @@ async def chat(
         session = await agent_service.get_session(request.session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
+        session_job_id = session.get("job_id")
+        if isinstance(session_job_id, str) and session_job_id:
+            await _require_owned_job(session_job_id, agent_service, current_user)
+            if session_job_id != request.job_id:
+                raise HTTPException(status_code=400, detail="Session job does not match request job")
         session_id = request.session_id
 
     # Get agent response
@@ -64,11 +76,10 @@ async def chat(
 async def chat_stream(
     request: ChatRequest,
     agent_service: Annotated[AgentService, Depends(get_agent_service)] = None,
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """Stream chat responses and tool events from the AI assistant."""
-    job = await agent_service.job_service.get_job(request.job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    await _require_owned_job(request.job_id, agent_service, current_user)
 
     if not request.session_id:
         if request.workspace_id is None:
@@ -79,6 +90,11 @@ async def chat_stream(
         session = await agent_service.get_session(request.session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
+        session_job_id = session.get("job_id")
+        if isinstance(session_job_id, str) and session_job_id:
+            await _require_owned_job(session_job_id, agent_service, current_user)
+            if session_job_id != request.job_id:
+                raise HTTPException(status_code=400, detail="Session job does not match request job")
         session_id = request.session_id
 
     async def event_generator():

@@ -5,6 +5,7 @@ import {
   Files,
   FolderKanban,
   House,
+  Loader2,
   LogOut,
   MoreHorizontal,
   PanelsTopLeft,
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useAuthStore, useUIStore } from "@/store";
+import { toast } from "sonner";
 
 const SIDEBAR_LAYOUT_KEY = "cipher.shell.sidebar.layout";
 
@@ -90,6 +92,7 @@ export function AppShell({ children }: PropsWithChildren) {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const isLoggingOut = useAuthStore((s) => s.isLoggingOut);
 
   const userInitials = getUserInitials(user?.name, user?.email);
 
@@ -107,6 +110,17 @@ export function AppShell({ children }: PropsWithChildren) {
 
   const handleSidebarJobSelect = (jobId: string) => {
     void navigate({ to: "/designer/$jobId", params: { jobId } });
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.success("Signed out.");
+      window.location.assign("/login?reason=signed-out");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to sign out cleanly.";
+      toast.error(message);
+    }
   };
 
   const renderDesktopLink = (item: NavItemConfig) => {
@@ -165,6 +179,7 @@ export function AppShell({ children }: PropsWithChildren) {
                   variant="ghost"
                   className="flex min-h-[2.75rem] min-w-16 flex-col items-center justify-center px-2 py-1.5 text-foreground hover:bg-muted"
                   aria-label="More menu"
+                  disabled={isLoggingOut}
                 >
                   <MoreHorizontal className="h-5 w-5" />
                   <span className="mt-1 text-[0.7rem]">More</span>
@@ -172,9 +187,9 @@ export function AppShell({ children }: PropsWithChildren) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" side="top" className="mb-2 w-56">
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={logout} className="text-red-400 focus:text-red-300">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Logout</span>
+                <DropdownMenuItem onClick={() => void handleLogout()} className="text-red-400 focus:text-red-300" disabled={isLoggingOut}>
+                  {isLoggingOut ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
+                  <span>{isLoggingOut ? "Signing out..." : "Logout"}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -285,19 +300,20 @@ export function AppShell({ children }: PropsWithChildren) {
                       <span>Profile Settings</span>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={logout} className="text-red-400 focus:text-red-300">
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Logout</span>
+                    <DropdownMenuItem onClick={() => void handleLogout()} className="text-red-400 focus:text-red-300" disabled={isLoggingOut}>
+                      {isLoggingOut ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
+                      <span>{isLoggingOut ? "Signing out..." : "Logout"}</span>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Button
                   variant="ghost"
                   className="h-full px-3 py-3 text-red-400 hover:bg-red-900/20 hover:text-red-300"
-                  onClick={logout}
+                  onClick={() => void handleLogout()}
                   aria-label="Logout"
+                  disabled={isLoggingOut}
                 >
-                  <LogOut className="h-5 w-5" />
+                  {isLoggingOut ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogOut className="h-5 w-5" />}
                 </Button>
               </div>
             )}
@@ -354,11 +370,12 @@ export function AppShell({ children }: PropsWithChildren) {
                       "w-full justify-start p-4 text-red-400 hover:bg-red-900/20 hover:text-red-300",
                       !isOpen && "flex-col space-y-2"
                     )}
-                    onClick={logout}
+                    onClick={() => void handleLogout()}
                     aria-label="Logout"
+                    disabled={isLoggingOut}
                   >
-                    <LogOut className="h-5 w-5" />
-                    {isOpen && <span className="ml-3">Logout</span>}
+                    {isLoggingOut ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogOut className="h-5 w-5" />}
+                    {isOpen && <span className="ml-3">{isLoggingOut ? "Signing out..." : "Logout"}</span>}
                   </Button>
                 </div>
               </div>

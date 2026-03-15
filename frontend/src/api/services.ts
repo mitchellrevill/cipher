@@ -1,7 +1,7 @@
 import axios from "axios";
+import { getAuthorizationHeaders } from "@/auth/msal";
 import api from "./client";
 import { ENV } from "@/config/env";
-import { useAuthStore } from "@/store";
 
 export type JobStatus = "pending" | "processing" | "complete" | "failed";
 export type SuggestionSource = "ai" | "manual" | "agent";
@@ -264,13 +264,13 @@ class RedactionAgentService {
       signal?: AbortSignal;
     } = {}
   ): Promise<void> {
-    const token = useAuthStore.getState().token;
     const url = new URL("/api/agent/chat/stream", ENV.BACKEND_URL).toString();
+    const authHeaders = await getAuthorizationHeaders();
     const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...authHeaders,
       },
       body: JSON.stringify({
         job_id: jobId,
@@ -403,6 +403,18 @@ class WorkspaceServiceApi {
     return response.data;
   }
 
+  async updateWorkspace(
+    workspaceId: string,
+    payload: { name?: string; description?: string | null }
+  ): Promise<WorkspaceState> {
+    const response = await api.patch<WorkspaceState>(`/api/workspaces/${workspaceId}`, payload);
+    return response.data;
+  }
+
+  async deleteWorkspace(workspaceId: string): Promise<void> {
+    await api.delete(`/api/workspaces/${workspaceId}`);
+  }
+
   async createRule(
     workspaceId: string,
     payload: { pattern: string; category: string; confidenceThreshold?: number; appliesTo?: string[] }
@@ -413,6 +425,11 @@ class WorkspaceServiceApi {
       confidence_threshold: payload.confidenceThreshold ?? 0.8,
       applies_to: payload.appliesTo,
     });
+    return response.data;
+  }
+
+  async removeRule(workspaceId: string, ruleId: string): Promise<WorkspaceState> {
+    const response = await api.delete<WorkspaceState>(`/api/workspaces/${workspaceId}/rules/${ruleId}`);
     return response.data;
   }
 

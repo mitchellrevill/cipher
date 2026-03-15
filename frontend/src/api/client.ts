@@ -8,6 +8,7 @@
  */
 
 import axios from "axios";
+import { getAuthorizationHeaders, redirectToLogin } from "@/auth/msal";
 import { ENV } from "@/config/env";
 import { useAuthStore } from "@/store";
 
@@ -21,15 +22,10 @@ const api = axios.create({
 
 // Request interceptor - add token to requests
 api.interceptors.request.use(
-  (config) => {
-    const token = useAuthStore.getState().token;
-    // In dev mode, use dev token bypass (server should accept it)
-    // In production, use real JWT token
-    if (token && token !== "dev-token-bypass") {
-      config.headers.Authorization = `Bearer ${token}`;
-    } else if (import.meta.env.DEV && token === "dev-token-bypass") {
-      // Dev mode: add dev token for local development
-      config.headers.Authorization = `Bearer ${token}`;
+  async (config) => {
+    const headers = await getAuthorizationHeaders();
+    if (headers.Authorization) {
+      config.headers.Authorization = headers.Authorization;
     }
     return config;
   },
@@ -42,11 +38,9 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // In dev mode, errors are more lenient
-    if (error.response?.status === 401 && !import.meta.env.DEV) {
-      // Token expired or invalid (only in production)
-      useAuthStore.getState().logout();
-      window.location.href = "/login";
+    if (error.response?.status === 401) {
+      useAuthStore.getState().clearAuth();
+      redirectToLogin(window.location.href, "session-expired");
     }
     return Promise.reject(error);
   }

@@ -6,8 +6,10 @@
  * - Global notifications
  */
 
+import type { AccountInfo } from "@azure/msal-browser";
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
+import { msalInstance } from "@/auth/msal";
 import type { User } from "@/types";
 
 // Dev mode: bypass authentication
@@ -23,43 +25,80 @@ const DEV_USER: User = {
 export interface AuthState {
   user: User | null;
   token: string | null;
+  msalAccount: AccountInfo | null;
   isAuthenticated: boolean;
+  isLoggingOut: boolean;
   isLoading: boolean;
   error: string | null;
   setUser: (user: User | null) => void;
   setToken: (token: string | null) => void;
+  setMsalAccount: (account: AccountInfo | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  logout: () => void;
+  clearAuth: () => void;
+  logout: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
   devtools(
-    (set) => ({
+    (set, get) => ({
       user: DEV_MODE ? DEV_USER : null,
-      token: DEV_MODE ? "dev-token-bypass" : localStorage.getItem("auth_token"),
-      isAuthenticated: DEV_MODE ? true : !!localStorage.getItem("auth_token"),
+      token: null,
+      msalAccount: null,
+      isAuthenticated: false,
+      isLoggingOut: false,
       isLoading: false,
       error: null,
       setUser: (user) => set({ user, isAuthenticated: !!user }),
-      setToken: (token) => {
-        if (token) {
-          localStorage.setItem("auth_token", token);
-        } else {
-          localStorage.removeItem("auth_token");
-        }
-        set({ token, isAuthenticated: !!token });
-      },
+      setToken: (token) => set((state) => ({ token, isAuthenticated: !!(token || state.user || state.msalAccount) })),
+      setMsalAccount: (msalAccount) =>
+        set((state) => ({ msalAccount, isAuthenticated: !!(msalAccount || state.user || state.token) })),
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
-      logout: () => {
-        localStorage.removeItem("auth_token");
+      clearAuth: () => {
         set({
-          user: DEV_MODE ? DEV_USER : null,
-          token: DEV_MODE ? "dev-token-bypass" : null,
-          isAuthenticated: DEV_MODE ? true : false,
+          user: null,
+          token: null,
+          msalAccount: null,
+          isAuthenticated: false,
+          isLoggingOut: false,
           error: null,
         });
+      },
+      logout: async () => {
+        set({ isLoggingOut: true, error: null });
+        if (DEV_MODE) {
+          set({
+            user: null,
+            token: null,
+            msalAccount: null,
+            isAuthenticated: false,
+            isLoggingOut: false,
+            error: null,
+          });
+          return;
+        }
+
+        const state = get();
+        const account = state.msalAccount ?? msalInstance.getActiveAccount() ?? msalInstance.getAllAccounts()[0] ?? null;
+
+        try {
+          if (account) {
+            await msalInstance.logoutPopup({
+              account,
+              postLogoutRedirectUri: `${window.location.origin}/login?reason=signed-out`,
+            });
+          }
+        } finally {
+          set({
+            user: null,
+            token: null,
+            msalAccount: null,
+            isAuthenticated: false,
+            isLoggingOut: false,
+            error: null,
+          });
+        }
       },
     }),
     { name: "auth-store" }

@@ -18,7 +18,7 @@ def seeded_job():
         rects=[RedactionRect(x0=10, y0=10, x1=100, y1=30)], approved=True, created_at=datetime.utcnow()
     )
     return Job(
-        job_id="job-test", status=JobStatus.COMPLETE, suggestions=[suggestion]
+        job_id="job-test", status=JobStatus.COMPLETE, suggestions=[suggestion], user_id="test-user-123"
     )
 
 
@@ -146,7 +146,7 @@ async def test_apply_redactions_job_not_complete(test_app, mock_redaction_servic
     # The test_app fixture uses seeded_job_service which returns job-test (COMPLETE status)
     # For this test, we need to use a job with PROCESSING status
     # Since the seeded_job_service is hardcoded to job-test, we'll update its return value
-    pending_job = Job(job_id="job-test", status=JobStatus.PROCESSING)
+    pending_job = Job(job_id="job-test", status=JobStatus.PROCESSING, user_id="test-user-123")
     test_app.container.job_service.return_value.get_job = AsyncMock(return_value=pending_job)
 
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:

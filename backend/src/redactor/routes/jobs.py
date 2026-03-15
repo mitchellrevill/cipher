@@ -1,11 +1,12 @@
 import asyncio
-import uuid
 import json
 import logging
+import uuid
 from typing import Annotated
 from uuid import UUID
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Request, Depends
 from fastapi.responses import StreamingResponse
+from redactor.auth import CurrentUser, get_current_user
 from redactor.config import get_settings
 from redactor.models import Job, JobStatus, PageStatusEvent, SuggestionFoundEvent
 from redactor.services.job_service import JobService
@@ -25,7 +26,7 @@ def _validate_job_id(job_id: str) -> bool:
     except ValueError:
         return False
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 MAX_STREAM_SECONDS = 600  # 10 minutes
 
@@ -55,6 +56,15 @@ async def get_redaction_service(request: Request) -> RedactionService:
     return request.app.container.services.redaction_service()
 
 
+async def _require_owned_job(job_id: str, job_service: JobService, current_user: CurrentUser) -> Job:
+    job = await job_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return job
+
+
 async def _run_job(
     job_id: str,
     pdf_bytes: bytes,
@@ -79,9 +89,15 @@ async def list_jobs(
     limit: int = 50,
     unassigned: bool = False,
     job_service: Annotated[JobService, Depends(get_job_service)] = None,
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """List jobs, optionally filtered to those not assigned to a workspace."""
-    return await job_service.list_jobs(skip=skip, limit=limit, unassigned_only=unassigned)
+    return await job_service.list_jobs(
+        skip=skip,
+        limit=limit,
+        unassigned_only=unassigned,
+        user_id=current_user.user_id,
+    )
 
 
 @router.delete("/{job_id}/suggestions/{suggestion_id}", status_code=204)
@@ -90,14 +106,13 @@ async def delete_suggestion(
     suggestion_id: str,
     job_service: Annotated[JobService, Depends(get_job_service)],
     redaction_service: Annotated[RedactionService, Depends(get_redaction_service)],
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """Delete a suggestion from a job."""
     if not _validate_job_id(job_id):
         raise HTTPException(status_code=400, detail="Invalid job ID")
 
-    job = await job_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = await _require_owned_job(job_id, job_service, current_user)
 
     if not any(suggestion.id == suggestion_id for suggestion in job.suggestions):
         raise HTTPException(status_code=404, detail="Suggestion not found")
@@ -114,6 +129,7 @@ async def upload_document(
     workspace_id: str = Form(default=""),
     job_service: Annotated[JobService, Depends(get_job_service)] = None,
     workspace_service: Annotated[WorkspaceService, Depends(get_workspace_service)] = None,
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """Upload a document for redaction."""
     job_id = str(uuid.uuid4())
@@ -124,6 +140,7 @@ async def upload_document(
     job = await job_service.create_job(
         job_id=job_id,
         filename=file.filename,
+        user_id=current_user.user_id,
         instructions=instructions,
         workspace_id=None,
     )
@@ -147,22 +164,23 @@ async def upload_document(
 @router.get("/{job_id}")
 async def get_job(
     job_id: str,
-    job_service: Annotated[JobService, Depends(get_job_service)] = None
+    job_service: Annotated[JobService, Depends(get_job_service)] = None,
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """Get job status."""
-    job = await job_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    return await _require_owned_job(job_id, job_service, current_user)
 
 
 @router.get("/{job_id}/stream")
 async def stream_job_status(
     job_id: str,
-    job_service: Annotated[JobService, Depends(get_job_service)] = None
+    job_service: Annotated[JobService, Depends(get_job_service)] = None,
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """SSE endpoint — streams status updates until job completes."""
     from sse_starlette.sse import EventSourceResponse
+
+    await _require_owned_job(job_id, job_service, current_user)
 
     async def event_generator():
         # Validate job_id format
@@ -203,7 +221,8 @@ async def stream_job_status(
 async def stream_analysis(
     job_id: str,
     request: Request,
-    job_service: Annotated[JobService, Depends(get_job_service)] = None
+    job_service: Annotated[JobService, Depends(get_job_service)] = None,
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """
     SSE endpoint for streaming redaction analysis.
@@ -211,6 +230,7 @@ async def stream_analysis(
     """
     settings = get_settings()
     blob = _get_blob(request)
+    await _require_owned_job(job_id, job_service, current_user)
 
     async def event_generator():
         # Validate job_id format
@@ -314,8 +334,14 @@ async def stream_analysis(
 
 
 @router.get("/{job_id}/download")
-async def download_redacted(job_id: str, request: Request):
+async def download_redacted(
+    job_id: str,
+    request: Request,
+    job_service: Annotated[JobService, Depends(get_job_service)],
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """Download redacted PDF."""
+    await _require_owned_job(job_id, job_service, current_user)
     blob = _get_blob(request)
     try:
         pdf_bytes = await blob.download_redacted_pdf(job_id)
@@ -333,8 +359,14 @@ async def download_redacted(job_id: str, request: Request):
 
 
 @router.get("/{job_id}/download-original")
-async def download_original(job_id: str, request: Request):
+async def download_original(
+    job_id: str,
+    request: Request,
+    job_service: Annotated[JobService, Depends(get_job_service)],
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """Download original uploaded PDF."""
+    await _require_owned_job(job_id, job_service, current_user)
     blob = _get_blob(request)
     try:
         pdf_bytes = await blob.download_original_pdf(job_id)

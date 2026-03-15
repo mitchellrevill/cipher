@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Suggestion } from "@/api/services";
+import { getAuthorizationHeaders } from "@/auth/msal";
 import { ENV } from "@/config/env";
 
 interface StreamSuggestion {
@@ -21,7 +22,7 @@ export function useSuggestionStreamListener(
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const suggestionsMapRef = useRef<Record<string, Suggestion>>({});
 
   const deduplicateSuggestions = useCallback(
@@ -90,64 +91,122 @@ export function useSuggestionStreamListener(
   // the effect will re-run and create a new EventSource connection even if jobId hasn't changed.
   useEffect(() => {
     if (!jobId) {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
       return;
     }
 
-    const eventSource = new EventSource(`${ENV.BACKEND_URL}/api/jobs/${jobId}/stream-analysis`);
-    eventSourceRef.current = eventSource;
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
-    eventSource.addEventListener("page_status", (event: Event) => {
+    const processEventChunk = (chunk: string) => {
+      const lines = chunk.split(/\r?\n/);
+      let eventName = "message";
+      const dataLines: string[] = [];
+
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          eventName = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          dataLines.push(line.slice(5).trim());
+        }
+      }
+
+      if (dataLines.length === 0) {
+        return;
+      }
+
       try {
-        const data = JSON.parse((event as MessageEvent).data);
-        onPageStatusUpdate?.(data.page_num, data.status);
+        const payload = JSON.parse(dataLines.join("\n")) as Record<string, unknown>;
+        if (eventName === "page_status") {
+          onPageStatusUpdate?.(Number(payload.page_num), String(payload.status ?? ""));
+          return;
+        }
+
+        if (eventName === "suggestion_found") {
+          const data = payload as unknown as StreamSuggestion;
+          const deduped = deduplicateSuggestions(data, jobId);
+          onSuggestionFound?.(deduped);
+          setSuggestions((prev) => {
+            const filtered = prev.filter((s) => s.id !== data.id);
+            return [...filtered, deduped];
+          });
+          return;
+        }
+
+        if (eventName === "analysis_complete") {
+          setIsConnected(false);
+          return;
+        }
+
+        if (eventName === "error") {
+          setError(typeof payload.error === "string" ? payload.error : "Analysis failed");
+          setIsConnected(false);
+        }
       } catch (err) {
-        console.error("Failed to parse page_status event", err);
+        console.error("Failed to parse stream event", err);
       }
-    });
-
-    eventSource.addEventListener("suggestion_found", (event: Event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent).data) as StreamSuggestion;
-        const deduped = deduplicateSuggestions(data, jobId);
-        onSuggestionFound?.(deduped);
-        setSuggestions((prev) => {
-          // Remove old version if exists, add new one
-          const filtered = prev.filter((s) => s.id !== data.id);
-          return [...filtered, deduped];
-        });
-      } catch (err) {
-        console.error("Failed to parse suggestion_found event", err);
-      }
-    });
-
-    eventSource.addEventListener("analysis_complete", () => {
-      console.log("Analysis streaming complete");
-    });
-
-    eventSource.addEventListener("error", (event: Event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent).data);
-        setError(data.error || "Analysis failed");
-      } catch {
-        setError("Connection lost");
-      }
-      eventSource.close();
-      eventSourceRef.current = null;
-      setIsConnected(false);
-    });
-
-    eventSource.onopen = () => {
-      setIsConnected(true);
-      setError(null);
     };
 
+    void (async () => {
+      try {
+        const authHeaders = await getAuthorizationHeaders();
+        const response = await fetch(`${ENV.BACKEND_URL}/api/jobs/${jobId}/stream-analysis`, {
+          headers: authHeaders,
+          signal: abortController.signal,
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || `Streaming failed with status ${response.status}`);
+        }
+
+        if (!response.body) {
+          throw new Error("Streaming response body was empty.");
+        }
+
+        setIsConnected(true);
+        setError(null);
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { value, done } = await reader.read();
+          buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+          const chunks = buffer.split(/\r?\n\r?\n/);
+          buffer = chunks.pop() ?? "";
+
+          for (const chunk of chunks) {
+            if (chunk.trim()) {
+              processEventChunk(chunk);
+            }
+          }
+
+          if (done) {
+            if (buffer.trim()) {
+              processEventChunk(buffer);
+            }
+            break;
+          }
+        }
+      } catch (err) {
+        if (abortController.signal.aborted) {
+          return;
+        }
+
+        setError(err instanceof Error ? err.message : "Connection lost");
+        setIsConnected(false);
+      }
+    })();
+
     return () => {
-      eventSource.close();
-      eventSourceRef.current = null;
+      abortController.abort();
+      abortControllerRef.current = null;
     };
   }, [jobId, onPageStatusUpdate, onSuggestionFound, deduplicateSuggestions]);
 

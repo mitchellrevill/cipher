@@ -108,20 +108,38 @@ class JobService:
         except Exception:
             return None
 
-    async def list_jobs(self, skip: int = 0, limit: int = 10) -> List[Job]:
+    async def list_jobs(
+        self,
+        skip: int = 0,
+        limit: int = 50,
+        unassigned_only: bool = False,
+    ) -> List[Job]:
         """
         List jobs with pagination.
 
         Args:
             skip: Number of items to skip
             limit: Maximum items to return
+            unassigned_only: If True, only return jobs with no workspace_id
 
         Returns:
-            List of jobs
+            List of jobs (without suggestions loaded)
         """
-        # Placeholder for Cosmos DB query
-        # Will be implemented when container is available (Task 9)
-        return []
+        if unassigned_only:
+            query = (
+                "SELECT * FROM c WHERE (NOT IS_DEFINED(c.workspace_id) OR IS_NULL(c.workspace_id) OR c.workspace_id = '') "
+                f"ORDER BY c.created_at DESC OFFSET {skip} LIMIT {limit}"
+            )
+        else:
+            query = f"SELECT * FROM c ORDER BY c.created_at DESC OFFSET {skip} LIMIT {limit}"
+
+        results = self.cosmos_client.query_items(
+            query=query,
+            enable_cross_partition_query=True,
+        )
+        if results is None:
+            return []
+        return [self._doc_to_job(doc) for doc in results]
 
     async def update_status(self, job_id: str, status: JobStatus, error: Optional[str] = None):
         """

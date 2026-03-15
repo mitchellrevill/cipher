@@ -166,6 +166,14 @@ class _CosmosClientWrapper:
         except Exception:
             return self._get_or_create_fallback().update_item(item=item, body=body, **kwargs)
 
+    def query_items(self, query=None, parameters=None, **kwargs):
+        try:
+            container = self._get_container()
+            items = container.query_items(query=query, parameters=parameters, **kwargs)
+            return list(items)
+        except Exception:
+            return self._get_or_create_fallback().query_items(query=query, parameters=parameters, **kwargs)
+
 
 def _create_job_service(cosmos_client, blob_client):
     """Factory function to create JobService with cosmos and blob clients."""

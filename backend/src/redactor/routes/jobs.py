@@ -68,6 +68,17 @@ async def _run_job(
         await job_service.update_status(job_id, JobStatus.FAILED, str(ex))
 
 
+@router.get("")
+async def list_jobs(
+    skip: int = 0,
+    limit: int = 50,
+    unassigned: bool = False,
+    job_service: Annotated[JobService, Depends(get_job_service)] = None,
+):
+    """List jobs, optionally filtered to those not assigned to a workspace."""
+    return await job_service.list_jobs(skip=skip, limit=limit, unassigned_only=unassigned)
+
+
 @router.post("", status_code=202)
 async def upload_document(
     request: Request,

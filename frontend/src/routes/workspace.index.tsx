@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { FolderKanban, Loader2, Plus, WandSparkles } from "lucide-react";
 import { workspaceService } from "@/api/services";
 import { CreateWorkspaceDialog } from "@/components/workspace/create-workspace-dialog";
-import { Badge, Button } from "@/components/ui";
+import { Badge, Button, PageHeading } from "@/components/ui";
 
 export default function WorkspacesRoute() {
   const navigate = useNavigate();
@@ -25,17 +25,20 @@ export default function WorkspacesRoute() {
 
   return (
     <>
-      <div className="h-full overflow-auto px-6 py-6">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Workspaces</h1>
-            <p className="text-sm text-muted-foreground">Manage your document workspaces</p>
-          </div>
-          <Button type="button" onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            New workspace
-          </Button>
-        </div>
+      <div className="flex h-full flex-col overflow-hidden">
+        <PageHeading
+          title="Workspaces"
+          description="Manage your document workspaces"
+          icon={<FolderKanban />}
+          actions={
+            <Button type="button" onClick={() => setCreateOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New workspace
+            </Button>
+          }
+          bleed={false}
+        />
+        <div className="flex-1 overflow-auto px-6 py-6">
 
         {workspaces && workspaces.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border/60 px-4 py-16 text-center">
@@ -121,6 +124,7 @@ export default function WorkspacesRoute() {
             ))}
           </div>
         )}
+        </div>
       </div>
 
       <CreateWorkspaceDialog

@@ -184,6 +184,11 @@ class RedactionJobService {
     return response.data;
   }
 
+  async listJobs(params: { skip?: number; limit?: number; unassigned?: boolean } = {}): Promise<RedactionJob[]> {
+    const response = await api.get<RedactionJob[]>("/api/jobs", { params });
+    return response.data;
+  }
+
   async getJob(jobId: string): Promise<RedactionJob> {
     const response = await api.get<RedactionJob>(`/api/jobs/${jobId}`);
     return response.data;

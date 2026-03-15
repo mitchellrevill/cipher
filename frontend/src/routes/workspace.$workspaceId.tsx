@@ -6,7 +6,7 @@ import { workspaceService } from "@/api/services";
 import { AddToWorkspaceDialog } from "@/components/workspace/add-to-workspace-dialog";
 import { WorkspaceExclusionsSlideover } from "@/components/workspace/workspace-exclusions-slideover";
 import { WorkspaceRulesSlideover } from "@/components/workspace/workspace-rules-slideover";
-import { Badge, Button } from "@/components/ui";
+import { Badge, Button, PageHeading } from "@/components/ui";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRecentJobs } from "@/hooks/useRecentJobs";
@@ -15,7 +15,7 @@ import { useWorkspaceStore } from "@/store/workspace-store";
 import { toast } from "sonner";
 
 export default function WorkspaceDetailsRoute() {
-  const { workspaceId } = useParams() as { workspaceId: string };
+  const { workspaceId } = useParams({ strict: false }) as { workspaceId: string };
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { recentJobs } = useRecentJobs();
@@ -67,24 +67,17 @@ export default function WorkspaceDetailsRoute() {
   return (
     <>
       <div className="flex h-full flex-col overflow-hidden bg-background">
-        <div className="border-b border-border/60 px-6 py-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-2">
-              <Button type="button" variant="ghost" size="sm" className="-ml-3" onClick={() => handleOpenStudio()}>
-                <ArrowLeft className="h-4 w-4" />
-                Back to studio
-              </Button>
-              <div className="flex items-center gap-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <FolderKanban className="h-5 w-5" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-semibold tracking-tight">{workspace.name}</h1>
-                  {workspace.description ? <p className="text-sm text-muted-foreground">{workspace.description}</p> : null}
-                </div>
-              </div>
-            </div>
-
+        <div className="px-6 pt-3">
+          <Button type="button" variant="ghost" size="sm" className="-ml-2" onClick={() => handleOpenStudio()}>
+            <ArrowLeft className="h-4 w-4" />
+            Back to studio
+          </Button>
+        </div>
+        <PageHeading
+          title={workspace.name}
+          description={workspace.description ?? undefined}
+          icon={<FolderKanban />}
+          actions={
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="rounded-full border-0">{workspace.documents.length} files</Badge>
               <Badge variant="secondary" className="rounded-full border-0">{workspace.rules.length} rules</Badge>
@@ -96,8 +89,9 @@ export default function WorkspaceDetailsRoute() {
                 Manage exclusions
               </Button>
             </div>
-          </div>
-        </div>
+          }
+          bleed={false}
+        />
 
         <div className="flex-1 overflow-hidden px-6 py-5">
           <Tabs defaultValue="files" className="flex h-full flex-col">

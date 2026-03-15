@@ -102,7 +102,7 @@ export default function DocumentsRoute() {
   const setSelectedWorkspaceId = useWorkspaceStore((state) => state.setSelectedWorkspaceId);
   const addDragContextFile = useWorkspaceStore((state) => state.addDragContextFile);
 
-  const { workspaceId: urlWorkspaceId } = useParams() as { workspaceId?: string };
+  const { workspaceId: urlWorkspaceId } = useParams({ strict: false }) as { workspaceId?: string };
 
   useEffect(() => {
     if (urlWorkspaceId) {
@@ -114,6 +114,7 @@ export default function DocumentsRoute() {
     activeJobId ?? recentJobs[0]?.jobId ?? null
   );
   const userClearedSelectionRef = useRef(false);
+  const [, setLocalPdfCacheVersion] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [instructions, setInstructions] = useState(
@@ -292,6 +293,9 @@ export default function DocumentsRoute() {
     const loadPdfFromServer = async () => {
       try {
         await loadOriginalPdf(selectedJobId);
+        // registerLocalPdf updates an in-memory Map (no React state), so we must
+        // trigger a re-render to pick up the new localPdfUrl from the registry.
+        setLocalPdfCacheVersion((v) => v + 1);
       } catch (error) {
         // Silently fail — PDF might not be available yet or user can view redacted version
         console.debug("Original PDF not available from server");

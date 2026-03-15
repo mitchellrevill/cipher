@@ -2,6 +2,7 @@ import React, { useState, type PropsWithChildren } from "react";
 import {
   ChevronLeft,
   ChevronRight,
+  Files,
   FolderKanban,
   House,
   LogOut,
@@ -43,6 +44,7 @@ interface NavSectionConfig {
 
 const PRIMARY_NAV_ITEMS: ReadonlyArray<NavItemConfig> = [
   { id: "overview", icon: House, label: "Overview", to: "/", mobileShortLabel: "Home" },
+  { id: "jobs", icon: Files, label: "All Jobs", to: "/jobs", mobileShortLabel: "Jobs" },
   { id: "workspaces", icon: FolderKanban, label: "Workspaces", to: "/workspace", mobileShortLabel: "Work" },
 ];
 

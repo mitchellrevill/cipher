@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowRight, FileSearch } from "lucide-react";
-import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
+import { ArrowRight, FileSearch, House } from "lucide-react";
+import { Button, Card, CardContent, CardHeader, CardTitle, PageHeading } from "@/components/ui";
 import { useRecentJobs } from "@/hooks/useRecentJobs";
 import { setActiveJobId } from "@/lib/recent-jobs";
 import { formatBytes } from "@/lib/utils";
@@ -18,12 +18,14 @@ export default function IndexRoute() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 space-y-8">
-      {/* Page heading */}
-      <div className="space-y-1">
-        <h1 className="text-xl font-semibold tracking-tight">Overview</h1>
-        <p className="text-sm text-muted-foreground">Document redaction pipeline status</p>
-      </div>
+    <div className="flex h-full flex-col overflow-auto">
+      <PageHeading
+        title="Overview"
+        description="Document redaction pipeline status"
+        icon={<House />}
+        bleed={false}
+      />
+      <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 space-y-8">
 
       {/* Stats */}
       <div className="grid gap-3 sm:grid-cols-3">
@@ -95,6 +97,7 @@ export default function IndexRoute() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

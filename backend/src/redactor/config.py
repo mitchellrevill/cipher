@@ -39,7 +39,7 @@ class Settings(BaseSettings):
 
     # Azure Blob Storage
     azure_storage_account_url: str = ""
-    azure_storage_container: str = "redaction-jobs"
+    azure_storage_container: str = "redacted-jobs"
     azure_storage_account_key: str = ""   # fallback when managed identity lacks permissions
 
     # Azure Cosmos DB

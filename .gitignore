@@ -21,6 +21,5 @@ dist/
 .DS_Store
 Thumbs.db
 .worktrees/
-/infra/*
 
 logo.png

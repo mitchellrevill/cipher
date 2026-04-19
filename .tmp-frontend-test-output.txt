@@ -1,0 +1,87 @@
+
+> cipher-frontend@0.1.0 test C:\Users\Mitchell003\repos\cipher\frontend
+> vitest run --config vitest.config.ts "--" "--run"
+
+
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90mC:/Users/Mitchell003/repos/cipher/frontend[39m
+
+ [32mÔ£ô[39m src/hooks/__tests__/usePageProcessingStatus.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32mÔ£ô[39m src/tests/workspace-store.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32mÔ£ô[39m src/tests/workspace-files-panel.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 75[2mms[22m[39m
+ [32mÔ£ô[39m src/hooks/__tests__/useSuggestionStreamListener.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+stderr | src/tests/workspace-index.test.tsx > WorkspacesRoute > renders the Workspaces heading
+Error: Not implemented: navigation (except hash changes)
+    at module.exports (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\browser\not-implemented.js:9:17)
+    at navigateFetch (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\navigation.js:77:3)
+    at exports.navigate (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\navigation.js:55:3)
+    at LocationImpl._locationObjectNavigate (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\Location-impl.js:30:5)
+    at LocationImpl.assign (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\Location-impl.js:206:10)
+    at Location.assign (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\generated\Location.js:72:36)
+    at redirectToLogin (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:64:19)
+    at getAccessToken (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:118:5)
+    at getAuthorizationHeaders (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:139:23)
+    at C:\Users\Mitchell003\repos\cipher\frontend\src\api\client.ts:26:27 undefined
+
+stderr | src/tests/workspace-index.test.tsx > WorkspacesRoute > renders a card for each workspace
+Error: Not implemented: navigation (except hash changes)
+    at module.exports (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\browser\not-implemented.js:9:17)
+    at navigateFetch (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\navigation.js:77:3)
+    at exports.navigate (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\navigation.js:55:3)
+    at LocationImpl._locationObjectNavigate (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\Location-impl.js:30:5)
+    at LocationImpl.assign (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\Location-impl.js:206:10)
+    at Location.assign (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\generated\Location.js:72:36)
+    at redirectToLogin (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:64:19)
+    at getAccessToken (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:118:5)
+    at getAuthorizationHeaders (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:139:23)
+    at C:\Users\Mitchell003\repos\cipher\frontend\src\api\client.ts:26:27 undefined
+
+stderr | src/tests/workspace-index.test.tsx > WorkspacesRoute > shows document, rule and exclusion counts as badges
+Error: Not implemented: navigation (except hash changes)
+    at module.exports (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\browser\not-implemented.js:9:17)
+    at navigateFetch (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\navigation.js:77:3)
+    at exports.navigate (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\navigation.js:55:3)
+    at LocationImpl._locationObjectNavigate (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\Location-impl.js:30:5)
+    at LocationImpl.assign (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\Location-impl.js:206:10)
+    at Location.assign (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\generated\Location.js:72:36)
+    at redirectToLogin (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:64:19)
+    at getAccessToken (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:118:5)
+    at getAuthorizationHeaders (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:139:23)
+    at C:\Users\Mitchell003\repos\cipher\frontend\src\api\client.ts:26:27 undefined
+
+stderr | src/tests/workspace-index.test.tsx > WorkspacesRoute > shows empty state when no workspaces exist
+Error: Not implemented: navigation (except hash changes)
+    at module.exports (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\browser\not-implemented.js:9:17)
+    at navigateFetch (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\navigation.js:77:3)
+    at exports.navigate (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\navigation.js:55:3)
+    at LocationImpl._locationObjectNavigate (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\Location-impl.js:30:5)
+    at LocationImpl.assign (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\Location-impl.js:206:10)
+    at Location.assign (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\generated\Location.js:72:36)
+    at redirectToLogin (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:64:19)
+    at getAccessToken (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:118:5)
+    at getAuthorizationHeaders (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:139:23)
+    at C:\Users\Mitchell003\repos\cipher\frontend\src\api\client.ts:26:27 undefined
+
+stderr | src/tests/workspace-index.test.tsx > WorkspacesRoute > opens the create dialog when 'New workspace' is clicked
+Error: Not implemented: navigation (except hash changes)
+    at module.exports (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\browser\not-implemented.js:9:17)
+    at navigateFetch (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\navigation.js:77:3)
+    at exports.navigate (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\navigation.js:55:3)
+    at LocationImpl._locationObjectNavigate (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\Location-impl.js:30:5)
+    at LocationImpl.assign (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\window\Location-impl.js:206:10)
+    at Location.assign (C:\Users\Mitchell003\repos\cipher\frontend\node_modules\.pnpm\jsdom@26.1.0\node_modules\jsdom\lib\jsdom\living\generated\Location.js:72:36)
+    at redirectToLogin (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:64:19)
+    at getAccessToken (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:118:5)
+    at getAuthorizationHeaders (C:\Users\Mitchell003\repos\cipher\frontend\src\auth\msal.ts:139:23)
+    at C:\Users\Mitchell003\repos\cipher\frontend\src\api\client.ts:26:27 undefined
+
+ [32mÔ£ô[39m src/tests/workspace-chat-header.test.tsx [2m([22m[2m7 tests[22m[2m)[22m[32m 103[2mms[22m[39m
+ [32mÔ£ô[39m src/tests/workspace-index.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 1266[2mms[22m[39m
+ [32mÔ£ô[39m src/tests/agent-chat-panel.test.tsx [2m([22m[2m14 tests[22m[2m)[22m[32m 248[2mms[22m[39m
+ [32mÔ£ô[39m src/tests/workspace-sidebar-jobs.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 122[2mms[22m[39m
+ [32mÔ£ô[39m src/tests/add-to-workspace-dialog.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 179[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m9 passed[39m[22m[90m (9)[39m
+[2m      Tests [22m [1m[32m50 passed[39m[22m[90m (50)[39m
+[2m   Start at [22m 16:48:43
+[2m   Duration [22m 4.18s[2m (transform 680ms, setup 2.48s, collect 9.97s, tests 2.04s, environment 9.17s, prepare 2.65s)[22m
+

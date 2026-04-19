@@ -128,9 +128,11 @@ The app now protects all frontend routes and backend API endpoints with Microsof
 Set these in `frontend/.env`:
 
 ```env
-VITE_MSAL_CLIENT_ID=<your-client-id>
+VITE_MSAL_CLIENT_ID=<your-application-client-id>
 VITE_MSAL_AUTHORITY=https://login.microsoftonline.com/<your-tenant-id>
 VITE_MSAL_REDIRECT_URI=http://localhost:3000
+# If your API is a separate app registration, set its scope here:
+# VITE_MSAL_API_SCOPE=api://<api-app-client-id-or-app-id-uri>/access_as_user
 ```
 
 ### Backend auth variables
@@ -140,8 +142,9 @@ Set these in `backend/.env`:
 ```env
 AZURE_AD_TENANT_ID=<your-tenant-id>
 AZURE_AD_CLIENT_ID=<your-client-id>
+AZURE_AD_AUDIENCE=<api-app-client-id-or-app-id-uri>
 ENV=development
-DEV_BYPASS=true
+DEV_BYPASS=false
 ```
 
 ### Required app registration setup
@@ -151,17 +154,9 @@ In Microsoft Entra ID / Azure AD, make sure your app registration includes:
 - an exposed API scope: `api://<CLIENT_ID>/access_as_user`
 - SPA redirect URIs for your local frontend URL and any deployed frontend URL
 - delegated permissions such as `openid`, `profile`, and `email`
+- the API app's Application ID URI or client ID configured in `AZURE_AD_AUDIENCE`
 
-### Local dev bypass
-
-For local-only development, the app supports a bypass login:
-
-- frontend dev mode accepts any credentials on the login page
-- backend accepts `Bearer dev-token-bypass` only when both:
-	- `ENV=development`
-	- `DEV_BYPASS=true`
-
-If `DEV_BYPASS=true` is set outside development, backend startup will fail intentionally.
+The frontend now uses the Microsoft login popup directly. There is no local password form or fake login mode.
 
 ## Tests
 

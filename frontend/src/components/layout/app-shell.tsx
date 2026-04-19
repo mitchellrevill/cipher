@@ -11,9 +11,8 @@ import {
   PanelsTopLeft,
   User,
 } from "lucide-react";
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { WorkspaceSidebarJobs } from "@/components/workspace/workspace-sidebar-jobs";
-import { useRecentJobs } from "@/hooks/useRecentJobs";
+import { Link, useRouterState } from "@tanstack/react-router";
+// recent jobs removed from sidebar
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Button,
@@ -74,22 +73,11 @@ const getUserInitials = (name?: string | null, email?: string | null): string =>
 export function AppShell({ children }: PropsWithChildren) {
   const isOpen = useUIStore((s) => s.sidebarOpen);
   const setIsOpen = useUIStore((s) => s.setSidebarOpen);
-  const { recentJobs } = useRecentJobs();
   const [sidebarLayout, setSidebarLayout] = useState<"left" | "top">(() =>
     readStringStorage(SIDEBAR_LAYOUT_KEY, "left") === "top" ? "top" : "left"
   );
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const activeJobId = (() => {
-    const designerPathMatch = pathname.match(/\/designer\/([^/]+)$/);
-    if (!designerPathMatch) {
-      return null;
-    }
-
-    return designerPathMatch[1] === "new" ? null : designerPathMatch[1];
-  })();
-
-  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const isLoggingOut = useAuthStore((s) => s.isLoggingOut);
@@ -110,9 +98,7 @@ export function AppShell({ children }: PropsWithChildren) {
     });
   };
 
-  const handleSidebarJobSelect = (jobId: string) => {
-    void navigate({ to: "/designer/$jobId", params: { jobId } });
-  };
+  
 
   const handleLogout = async () => {
     try {
@@ -223,11 +209,7 @@ export function AppShell({ children }: PropsWithChildren) {
           {/* Logo — left sidebar expanded only */}
           {sidebarLayout === "left" && isOpen && (
             <div className="flex h-24 w-full flex-shrink-0 items-center justify-center overflow-hidden bg-sidebar pt-4">
-              <img
-                src="/logo.png"
-                alt="Barnsley Council Logo"
-                className="h-full w-full object-contain transition-all duration-300"
-              />
+              <img src="/logo.png" alt="Barnsley Council Logo" className="h-full w-full object-contain transition-all duration-300" />
             </div>
           )}
 
@@ -260,15 +242,7 @@ export function AppShell({ children }: PropsWithChildren) {
             ))}
           </nav>
 
-          {sidebarLayout === "left" && isOpen ? (
-            <div className="border-t border-sidebar-border px-2 py-2">
-              <WorkspaceSidebarJobs
-                jobs={recentJobs}
-                selectedJobId={activeJobId}
-                onJobSelect={handleSidebarJobSelect}
-              />
-            </div>
-          ) : null}
+          {/* recent jobs removed */}
 
           {/* Profile area */}
           <div className="flex-shrink-0">

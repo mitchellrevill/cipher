@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     # Authentication
     AZURE_AD_TENANT_ID: str = ""
     AZURE_AD_CLIENT_ID: str = ""
+    AZURE_AD_AUDIENCE: str = ""
     DEV_BYPASS: bool = False
     ENV: str = "production"
 

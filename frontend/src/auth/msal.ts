@@ -7,12 +7,14 @@ import { ENV } from "@/config/env";
 import { useAuthStore } from "@/store";
 import type { User } from "@/types";
 
-const DEV_MODE = import.meta.env.DEV;
-
-export const apiScope = ENV.MSAL_CLIENT_ID ? `api://${ENV.MSAL_CLIENT_ID}/access_as_user` : "";
+export const apiScope = ENV.MSAL_API_SCOPE || (ENV.MSAL_CLIENT_ID ? `api://${ENV.MSAL_CLIENT_ID}/access_as_user` : "");
 
 export const loginRequest = {
-  scopes: ["openid", "profile", "email", apiScope].filter(Boolean),
+  scopes: ["openid", "profile", "email"],
+};
+
+export const apiTokenRequest = {
+  scopes: [apiScope].filter(Boolean),
 };
 
 export const msalInstance = new PublicClientApplication({
@@ -27,6 +29,10 @@ export const msalInstance = new PublicClientApplication({
 });
 
 export const isMsalConfigured = Boolean(ENV.MSAL_CLIENT_ID && ENV.MSAL_AUTHORITY);
+
+export function getActiveAccount(): AccountInfo | null {
+  return msalInstance.getActiveAccount() ?? msalInstance.getAllAccounts()[0] ?? null;
+}
 
 export function accountToUser(account: AccountInfo): User {
   const claims = account.idTokenClaims as Record<string, unknown> | undefined;
@@ -59,17 +65,55 @@ export function redirectToLogin(
   throw new Error("Redirecting to login");
 }
 
-export async function getAccessToken(): Promise<string | null> {
-  const state = useAuthStore.getState();
-  if (DEV_MODE && state.token === "dev-token-bypass") {
-    return state.token;
-  }
-
+export async function startLoginRedirect(redirectTarget: string): Promise<void> {
   if (!isMsalConfigured) {
-    redirectToLogin(window.location.href, "auth-error");
+    throw new Error("MSAL is not configured. Set VITE_MSAL_CLIENT_ID and VITE_MSAL_AUTHORITY.");
   }
 
-  const account = state.msalAccount ?? msalInstance.getActiveAccount() ?? msalInstance.getAllAccounts()[0] ?? null;
+  await msalInstance.loginRedirect({
+    ...loginRequest,
+    redirectStartPage: redirectTarget,
+    prompt: "select_account",
+  });
+}
+
+export function syncAuthenticatedAccount(account: AccountInfo | null): void {
+  const authStore = useAuthStore.getState();
+
+  if (!account) {
+    authStore.clearAuth();
+    return;
+  }
+
+  msalInstance.setActiveAccount(account);
+  authStore.setMsalAccount(account);
+  authStore.setUser(accountToUser(account));
+  authStore.setError(null);
+}
+
+export async function initializeMsalSession(currentPathname = window.location.pathname): Promise<void> {
+  if (!isMsalConfigured) {
+    useAuthStore.getState().clearAuth();
+    return;
+  }
+
+  await msalInstance.handleRedirectPromise();
+
+  if (currentPathname === "/login") {
+    useAuthStore.getState().setMsalAccount(getActiveAccount());
+    return;
+  }
+
+  syncAuthenticatedAccount(getActiveAccount());
+}
+
+export async function getAccessToken(): Promise<string | null> {
+  if (!isMsalConfigured) {
+    useAuthStore.getState().setError("MSAL is not configured. Set VITE_MSAL_CLIENT_ID and VITE_MSAL_AUTHORITY.");
+    return null;
+  }
+
+  const account = useAuthStore.getState().msalAccount ?? getActiveAccount();
   if (!account) {
     redirectToLogin(window.location.href, "auth-required");
   }
@@ -78,7 +122,7 @@ export async function getAccessToken(): Promise<string | null> {
     msalInstance.setActiveAccount(account);
     const result = await msalInstance.acquireTokenSilent({
       account,
-      scopes: loginRequest.scopes,
+      scopes: apiTokenRequest.scopes,
     });
     return result.accessToken;
   } catch (error) {

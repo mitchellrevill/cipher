@@ -115,6 +115,15 @@ def _unauthorized(detail: str = "Unauthorized") -> HTTPException:
     return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
 
 
+def _allowed_issuers(tenant_id: str) -> list[str]:
+    tenant = tenant_id.strip()
+    return [
+        f"https://login.microsoftonline.com/{tenant}/v2.0",
+        f"https://login.microsoftonline.com/{tenant}/",
+        f"https://sts.windows.net/{tenant}/",
+    ]
+
+
 async def get_current_user(request: Request) -> CurrentUser:
     auth_header = request.headers.get("Authorization", "")
     scheme, _, token = auth_header.partition(" ")
@@ -128,6 +137,8 @@ async def get_current_user(request: Request) -> CurrentUser:
     if not settings.AZURE_AD_TENANT_ID or not settings.AZURE_AD_CLIENT_ID:
         raise _unauthorized("Azure AD is not configured")
 
+    audience = settings.AZURE_AD_AUDIENCE.strip() or f"api://{settings.AZURE_AD_CLIENT_ID}"
+
     try:
         unverified_header = jwt.get_unverified_header(token)
         kid = unverified_header.get("kid")
@@ -139,8 +150,8 @@ async def get_current_user(request: Request) -> CurrentUser:
             token,
             key=signing_key,
             algorithms=["RS256"],
-            audience=f"api://{settings.AZURE_AD_CLIENT_ID}",
-            issuer=f"https://login.microsoftonline.com/{settings.AZURE_AD_TENANT_ID}/v2.0",
+            audience=audience,
+            issuer=_allowed_issuers(settings.AZURE_AD_TENANT_ID),
         )
     except HTTPException:
         raise

@@ -8,7 +8,7 @@
  */
 
 import axios from "axios";
-import { getAuthorizationHeaders, redirectToLogin } from "@/auth/msal";
+import { getAuthorizationHeaders, isMsalConfigured, redirectToLogin } from "@/auth/msal";
 import { ENV } from "@/config/env";
 import { useAuthStore } from "@/store";
 
@@ -38,7 +38,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && isMsalConfigured) {
       useAuthStore.getState().clearAuth();
       redirectToLogin(window.location.href, "session-expired");
     }

@@ -18,7 +18,7 @@ export default function RootLayout() {
     select: (state) => state.location.pathname,
   });
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const showShell = pathname !== "/login" || isAuthenticated || import.meta.env.DEV;
+  const showShell = pathname !== "/login" || isAuthenticated;
 
   return (
     <ThemeProvider attribute="class" defaultTheme="light" themes={allThemeIds} enableSystem disableTransitionOnChange>

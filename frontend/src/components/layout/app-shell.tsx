@@ -80,14 +80,14 @@ export function AppShell({ children }: PropsWithChildren) {
   );
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-    const activeJobId = (() => {
-      const designerPathMatch = pathname.match(/\/designer\/([^/]+)$/);
-      if (!designerPathMatch) {
-        return null;
-      }
+  const activeJobId = (() => {
+    const designerPathMatch = pathname.match(/\/designer\/([^/]+)$/);
+    if (!designerPathMatch) {
+      return null;
+    }
 
-      return designerPathMatch[1] === "new" ? null : designerPathMatch[1];
-    })();
+    return designerPathMatch[1] === "new" ? null : designerPathMatch[1];
+  })();
 
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
@@ -95,6 +95,8 @@ export function AppShell({ children }: PropsWithChildren) {
   const isLoggingOut = useAuthStore((s) => s.isLoggingOut);
 
   const userInitials = getUserInitials(user?.name, user?.email);
+  const userDisplayName = user?.name || user?.email || "Microsoft account";
+  const userDisplayEmail = user?.email || "Signed in";
 
   const toggleSidebar = () => {
     setIsOpen(!isOpen);
@@ -278,17 +280,21 @@ export function AppShell({ children }: PropsWithChildren) {
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-sidebar-foreground">
                         {userInitials}
                       </div>
-                      {user && (
-                        <span className="block max-w-[180px] truncate text-sm font-medium text-sidebar-foreground">
-                          {user.email}
+                      <span className="block max-w-[180px] text-left">
+                        <span className="block truncate text-sm font-medium text-sidebar-foreground">
+                          {userDisplayName}
                         </span>
-                      )}
+                        <span className="block truncate text-xs text-sidebar-foreground/70">
+                          {userDisplayEmail}
+                        </span>
+                      </span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-64">
                     {user && (
                       <div className="border-b px-3 py-2">
-                        <div className="text-sm font-medium">{user.email}</div>
+                        <div className="text-sm font-medium">{userDisplayName}</div>
+                        <div className="text-xs text-muted-foreground">{userDisplayEmail}</div>
                       </div>
                     )}
                     <DropdownMenuItem onClick={toggleLayout}>
@@ -339,7 +345,10 @@ export function AppShell({ children }: PropsWithChildren) {
                         {user && isOpen && (
                           <div className="min-w-0 text-left">
                             <span className="block max-w-full truncate text-sm font-medium text-sidebar-foreground">
-                              {user.email}
+                              {userDisplayName}
+                            </span>
+                            <span className="block max-w-full truncate text-xs text-sidebar-foreground/70">
+                              {userDisplayEmail}
                             </span>
                           </div>
                         )}
@@ -348,7 +357,8 @@ export function AppShell({ children }: PropsWithChildren) {
                     <DropdownMenuContent align="end" className="w-64">
                       {user && (
                         <div className="border-b px-3 py-2">
-                          <div className="text-sm font-medium">{user.email}</div>
+                          <div className="text-sm font-medium">{userDisplayName}</div>
+                          <div className="text-xs text-muted-foreground">{userDisplayEmail}</div>
                         </div>
                       )}
                       <DropdownMenuItem onClick={toggleLayout}>

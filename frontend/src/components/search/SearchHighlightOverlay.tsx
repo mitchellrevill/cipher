@@ -11,6 +11,14 @@ interface SearchHighlightOverlayProps {
   activeMatchId?: string | null;
 }
 
+function toPercent(value: number, total: number) {
+  if (total <= 0) {
+    return "0%";
+  }
+
+  return `${(value / total) * 100}%`;
+}
+
 export function SearchHighlightOverlay({
   matches,
   onMatchClick,
@@ -69,10 +77,10 @@ export function SearchHighlightOverlay({
                   : "border-blue-500/80 bg-blue-400/14"
             )}
             style={{
-              left: `${left}px`,
-              top: `${top}px`,
-              width: `${width}px`,
-              height: `${height}px`,
+              left: toPercent(left, viewport.width),
+              top: toPercent(top, viewport.height),
+              width: toPercent(width, viewport.width),
+              height: toPercent(height, viewport.height),
             }}
             onMouseEnter={() => setHoveredMatchId(matchId)}
             onMouseLeave={() => setHoveredMatchId(null)}

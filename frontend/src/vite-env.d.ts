@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_MSAL_CLIENT_ID: string;
   readonly VITE_MSAL_AUTHORITY: string;
   readonly VITE_MSAL_REDIRECT_URI: string;
+  readonly VITE_MSAL_API_SCOPE?: string;
   readonly DEV: boolean;
   readonly PROD: boolean;
   readonly SSR: boolean;

@@ -1,5 +1,5 @@
 import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext } from "@dnd-kit/core";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
@@ -22,7 +22,6 @@ import {
   type AgentStreamEvent,
   type RedactionJob,
   type Suggestion,
-  type WorkspaceDocumentState,
 } from "@/api/services";
 import {
   AgentChatPanel,
@@ -35,7 +34,6 @@ import { AddToWorkspaceDialog } from "@/components/workspace/add-to-workspace-di
 import { CreateWorkspaceDialog } from "@/components/workspace/create-workspace-dialog";
 import { WorkspaceChatHeader } from "@/components/workspace/workspace-chat-header";
 import { WorkspaceExclusionsSlideover } from "@/components/workspace/workspace-exclusions-slideover";
-import { WorkspaceFilesPanel, type PanelFile } from "@/components/workspace/workspace-files-panel";
 import { WorkspaceRulesSlideover } from "@/components/workspace/workspace-rules-slideover";
 import {
   Badge,
@@ -59,7 +57,7 @@ import {
   type RecentJobRecord,
 } from "@/lib/recent-jobs";
 import { cn, formatBytes } from "@/lib/utils";
-import { useUIStore, useWorkspaceStore, type ChatContextFile } from "@/store";
+import { useUIStore, useWorkspaceStore } from "@/store";
 import type { TextMatch } from "@/types/search";
 import { toast } from "sonner";
 
@@ -100,7 +98,6 @@ export default function DocumentsRoute() {
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
   const selectedWorkspaceId = useWorkspaceStore((state) => state.selectedWorkspaceId);
   const setSelectedWorkspaceId = useWorkspaceStore((state) => state.setSelectedWorkspaceId);
-  const addDragContextFile = useWorkspaceStore((state) => state.addDragContextFile);
 
   const { workspaceId: urlWorkspaceId, jobId } = useParams({ strict: false }) as {
     workspaceId?: string;
@@ -135,7 +132,7 @@ export default function DocumentsRoute() {
   const [chatByJob, setChatByJob] = useState<Record<string, AgentConversationState>>({});
   const [streamingJobId, setStreamingJobId] = useState<string | null>(null);
   const [redactedPreviewUrls, setRedactedPreviewUrls] = useState<Record<string, string>>({});
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [chatCollapsed, setChatCollapsed] = useState(true);
   const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
   const [addToWorkspaceOpen, setAddToWorkspaceOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -388,18 +385,6 @@ export default function DocumentsRoute() {
       }
     },
     []
-  );
-
-  const getWorkspaceDocumentLabel = useCallback(
-    (document: WorkspaceDocumentState) => {
-      if (document.filename) {
-        return document.filename;
-      }
-
-      const recent = recentJobs.find((job) => job.jobId === document.id);
-      return recent?.filename ?? document.id;
-    },
-    [recentJobs]
   );
 
   // Initialize hotkeys for review mode
@@ -890,36 +875,6 @@ export default function DocumentsRoute() {
     [requestPageFocus]
   );
 
-  const workspaceScopedFiles = useMemo<PanelFile[]>(() => {
-    if (activeWorkspace) {
-      return activeWorkspace.documents.map((document) => ({
-        id: document.id,
-        filename: getWorkspaceDocumentLabel(document),
-        status: document.status ?? "complete",
-        workspaceId: activeWorkspace.id,
-      }));
-    }
-
-    return recentJobs.map((job) => ({
-      id: job.jobId,
-      filename: job.filename,
-      status: job.status,
-      workspaceId: undefined,
-    }));
-  }, [activeWorkspace, getWorkspaceDocumentLabel, recentJobs]);
-
-  const handleChatDrop = useCallback(
-    (event: DragEndEvent) => {
-      if (event.over?.id !== "chat-drop-zone" || !event.active.data.current) {
-        return;
-      }
-
-      const { jobId, filename, workspaceId } = event.active.data.current as ChatContextFile;
-      addDragContextFile({ jobId, filename, workspaceId });
-    },
-    [addDragContextFile]
-  );
-
   const handleSuggestionSelect = (suggestion: Suggestion) => {
     setSelectedSuggestionId(suggestion.id);
 
@@ -1111,35 +1066,10 @@ export default function DocumentsRoute() {
   // ──────────────────────────────────────────────────
   return (
     <>
-      <DndContext onDragEnd={handleChatDrop}>
+      <DndContext>
         <div className="flex h-full overflow-hidden">
-          <div
-            className={cn(
-              "flex-shrink-0 border-r border-border/60 bg-background transition-all duration-200 overflow-hidden",
-              sidebarCollapsed ? "w-0 border-0" : "w-72"
-            )}
-          >
-            {!sidebarCollapsed ? (
-              <WorkspaceFilesPanel
-                files={workspaceScopedFiles}
-                selectedJobId={selectedJobId}
-                onJobSelect={handleSelectJob}
-                onAddToChat={addDragContextFile}
-              />
-            ) : null}
-          </div>
-
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             <div className="flex shrink-0 items-center gap-2 border-b border-border/60 bg-background/80 px-3 py-2 backdrop-blur-sm">
-              <button
-                type="button"
-                onClick={() => setSidebarCollapsed((value) => !value)}
-                className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                title={sidebarCollapsed ? "Show files" : "Hide files"}
-              >
-                {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-              </button>
-
               <Button
                 type="button"
                 variant="outline"
@@ -1259,8 +1189,8 @@ export default function DocumentsRoute() {
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col bg-muted/20">
-              <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/20">
+              <div className="mx-auto min-h-0 w-full max-w-[64rem] flex-1 overflow-y-auto px-4 py-4">
                 <PdfDocumentViewer
                   source={viewerSource}
                   suggestions={sortedSuggestions}
@@ -1298,41 +1228,74 @@ export default function DocumentsRoute() {
             </div>
           </div>
 
-          <div className="flex w-[28rem] shrink-0 flex-col overflow-hidden border-l border-border/60 bg-background xl:w-[36rem]">
-            <WorkspaceChatHeader
-              workspace={activeWorkspace}
-              activeJobId={selectedJobId}
-              onRulesClick={() => setRulesOpen(true)}
-              onExclusionsClick={() => setExclusionsOpen(true)}
-              onAddToWorkspace={() => setAddToWorkspaceOpen(true)}
-              onCreateWorkspace={() => setCreateWorkspaceOpen(true)}
-            />
-            <AgentChatPanel
-              conversation={conversation}
-              promptPresets={AGENT_PROMPT_PRESETS}
-              isStreaming={isChatStreaming}
-              chatInput={chatInput}
-              onChatInputChange={setChatInput}
-              onSubmit={handleChatSubmit}
-              inputPlaceholder={selectedJobId ? "Ask about these files…" : "Select a job first"}
-              inputDisabled={!selectedJobId || isChatStreaming}
-              onQuickPrompt={handleQuickPrompt}
-              renderMessageText={renderMessageWithPageTokens}
-              suggestionsSection={{
-                suggestions: sortedSuggestions,
-                selectedSuggestionId,
-                onSuggestionSelect: handleSuggestionSelect,
-                onApprovalChange: (id, approved) => approvalMutation.mutate({ suggestionId: id, approved }),
-                onDelete: (suggestionId) => deleteSuggestionMutation.mutate(suggestionId),
-                getSuggestionPageLabel,
-                isLoading: jobQuery.isLoading,
-                hasJobData: !!activeJob,
-                jobStatus: activeJob?.status ?? null,
-                error: jobQuery.error
-                  ? getApiErrorMessage(jobQuery.error, "Unable to load job.")
-                  : null,
-              }}
-            />
+          <div className={cn("shrink-0 overflow-hidden border-l border-border/60 bg-background transition-all duration-200", chatCollapsed ? "w-12" : "w-[28rem] xl:w-[36rem]") }>
+            {chatCollapsed ? (
+              <div className="flex h-full items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => setChatCollapsed(false)}
+                  className="flex h-full w-full items-center justify-center text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                  title="Show chat"
+                  aria-label="Show chat"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex h-full flex-col overflow-hidden">
+                <div className="flex shrink-0 items-center justify-between border-b border-border/60 bg-muted/10 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Chat</div>
+                    <div className="truncate text-sm text-foreground">Assistant and suggestions</div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setChatCollapsed(true)}
+                    className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    title="Hide chat"
+                    aria-label="Hide chat"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <WorkspaceChatHeader
+                  workspace={activeWorkspace}
+                  activeJobId={selectedJobId}
+                  onRulesClick={() => setRulesOpen(true)}
+                  onExclusionsClick={() => setExclusionsOpen(true)}
+                  onAddToWorkspace={() => setAddToWorkspaceOpen(true)}
+                  onCreateWorkspace={() => setCreateWorkspaceOpen(true)}
+                />
+                <AgentChatPanel
+                  conversation={conversation}
+                  promptPresets={AGENT_PROMPT_PRESETS}
+                  isStreaming={isChatStreaming}
+                  chatInput={chatInput}
+                  onChatInputChange={setChatInput}
+                  onSubmit={handleChatSubmit}
+                  inputPlaceholder={selectedJobId ? "Ask about these files…" : "Select a job first"}
+                  inputDisabled={!selectedJobId || isChatStreaming}
+                  onQuickPrompt={handleQuickPrompt}
+                  renderMessageText={renderMessageWithPageTokens}
+                  suggestionsSection={{
+                    suggestions: sortedSuggestions,
+                    selectedSuggestionId,
+                    onSuggestionSelect: handleSuggestionSelect,
+                    onApprovalChange: (id, approved) => approvalMutation.mutate({ suggestionId: id, approved }),
+                    onDelete: (suggestionId) => deleteSuggestionMutation.mutate(suggestionId),
+                    getSuggestionPageLabel,
+                    isLoading: jobQuery.isLoading,
+                    hasJobData: !!activeJob,
+                    jobStatus: activeJob?.status ?? null,
+                    error: jobQuery.error
+                      ? getApiErrorMessage(jobQuery.error, "Unable to load job.")
+                      : null,
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
       </DndContext>

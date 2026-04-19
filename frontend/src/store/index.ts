@@ -12,26 +12,14 @@ import { devtools } from "zustand/middleware";
 import { msalInstance } from "@/auth/msal";
 import type { User } from "@/types";
 
-// Dev mode: bypass authentication
-const DEV_MODE = import.meta.env.DEV;
-
-const DEV_USER: User = {
-  id: "dev-user-123",
-  email: "dev@example.com",
-  name: "Developer",
-  roles: ["admin"],
-};
-
 export interface AuthState {
   user: User | null;
-  token: string | null;
   msalAccount: AccountInfo | null;
   isAuthenticated: boolean;
   isLoggingOut: boolean;
   isLoading: boolean;
   error: string | null;
   setUser: (user: User | null) => void;
-  setToken: (token: string | null) => void;
   setMsalAccount: (account: AccountInfo | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -42,23 +30,20 @@ export interface AuthState {
 export const useAuthStore = create<AuthState>()(
   devtools(
     (set, get) => ({
-      user: DEV_MODE ? DEV_USER : null,
-      token: null,
+      user: null,
       msalAccount: null,
       isAuthenticated: false,
       isLoggingOut: false,
       isLoading: false,
       error: null,
-      setUser: (user) => set({ user, isAuthenticated: !!user }),
-      setToken: (token) => set((state) => ({ token, isAuthenticated: !!(token || state.user || state.msalAccount) })),
+      setUser: (user) => set((state) => ({ user, isAuthenticated: !!(user || state.msalAccount) })),
       setMsalAccount: (msalAccount) =>
-        set((state) => ({ msalAccount, isAuthenticated: !!(msalAccount || state.user || state.token) })),
+        set((state) => ({ msalAccount, isAuthenticated: !!(msalAccount || state.user) })),
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
       clearAuth: () => {
         set({
           user: null,
-          token: null,
           msalAccount: null,
           isAuthenticated: false,
           isLoggingOut: false,
@@ -67,18 +52,6 @@ export const useAuthStore = create<AuthState>()(
       },
       logout: async () => {
         set({ isLoggingOut: true, error: null });
-        if (DEV_MODE) {
-          set({
-            user: null,
-            token: null,
-            msalAccount: null,
-            isAuthenticated: false,
-            isLoggingOut: false,
-            error: null,
-          });
-          return;
-        }
-
         const state = get();
         const account = state.msalAccount ?? msalInstance.getActiveAccount() ?? msalInstance.getAllAccounts()[0] ?? null;
 
@@ -92,7 +65,6 @@ export const useAuthStore = create<AuthState>()(
         } finally {
           set({
             user: null,
-            token: null,
             msalAccount: null,
             isAuthenticated: false,
             isLoggingOut: false,

@@ -48,7 +48,7 @@ function PageStatusBadge({ stage, stageLabel, errorMessage }: PageStatusBadgePro
 
   return (
     <div
-      className={`absolute top-1 right-1 px-2 py-1 rounded text-xs font-medium ${bgColor} ${textColor}`}
+      className={`absolute top-1 right-1 z-20 px-2 py-1 rounded text-xs font-medium ${bgColor} ${textColor}`}
       title={errorMessage || stageLabel}
     >
       {stage === "complete" ? <Check className="inline-block h-3 w-3" /> : stage === "error" ? <X className="inline-block h-3 w-3" /> : stageLabel.split(" ")[0]}
@@ -98,6 +98,14 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function toPercent(value: number, total: number) {
+  if (total <= 0) {
+    return "0%";
+  }
+
+  return `${(value / total) * 100}%`;
+}
+
 function getHoverCardLayout(box: OverlayBox, viewport: PageViewport): HoverCardLayout {
   const gap = 14;
   const availableWidth = Math.max(180, viewport.width - 24);
@@ -128,6 +136,15 @@ function getOverlayBox(rect: RedactionRect, viewport: PageViewport): DraftRect {
     top: Math.min(y0, y1),
     width: Math.abs(x1 - x0),
     height: Math.abs(y1 - y0),
+  };
+}
+
+function getRelativeRectStyle(rect: DraftRect, viewport: PageViewport) {
+  return {
+    left: toPercent(rect.left, viewport.width),
+    top: toPercent(rect.top, viewport.height),
+    width: toPercent(rect.width, viewport.width),
+    height: toPercent(rect.height, viewport.height),
   };
 }
 
@@ -193,8 +210,8 @@ function PdfPageCanvas({
         const ratio = window.devicePixelRatio || 1;
         canvas.width = Math.floor(nextViewport.width * ratio);
         canvas.height = Math.floor(nextViewport.height * ratio);
-        canvas.style.width = `${nextViewport.width}px`;
-        canvas.style.height = `${nextViewport.height}px`;
+        canvas.style.width = "100%";
+        canvas.style.height = "auto";
 
         context.setTransform(ratio, 0, 0, ratio, 0, 0);
         context.clearRect(0, 0, nextViewport.width, nextViewport.height);
@@ -245,13 +262,16 @@ function PdfPageCanvas({
 
   const getPoint = (event: ReactPointerEvent<HTMLDivElement>) => {
     const bounds = overlayRef.current?.getBoundingClientRect();
-    if (!bounds) {
+    if (!bounds || !overlayViewport || bounds.width <= 0 || bounds.height <= 0) {
       return null;
     }
 
+    const scaleX = overlayViewport.width / bounds.width;
+    const scaleY = overlayViewport.height / bounds.height;
+
     return {
-      x: Math.max(0, Math.min(bounds.width, event.clientX - bounds.left)),
-      y: Math.max(0, Math.min(bounds.height, event.clientY - bounds.top)),
+      x: clamp((event.clientX - bounds.left) * scaleX, 0, overlayViewport.width),
+      y: clamp((event.clientY - bounds.top) * scaleY, 0, overlayViewport.height),
     };
   };
 
@@ -316,7 +336,7 @@ function PdfPageCanvas({
   };
 
   return (
-    <div className="rounded-[1.5rem] border border-border/70 bg-white/80 p-4 shadow-sm shadow-slate-300/20 backdrop-blur dark:bg-card/90">
+    <div className="mx-auto w-full rounded-[1.5rem] border border-border/70 bg-white/80 p-4 shadow-sm shadow-slate-300/20 backdrop-blur dark:bg-card/90">
       <div className="mb-3 flex items-center justify-between gap-3 text-xs uppercase tracking-[0.24em] text-muted-foreground">
         <span>Page {pageNumber}</span>
         {isRendering ? (
@@ -327,9 +347,14 @@ function PdfPageCanvas({
         ) : null}
       </div>
 
-      <div className="relative mx-auto w-fit overflow-visible">
-        <div className="overflow-hidden rounded-[1rem] border border-border/70 bg-muted/20 shadow-[0_12px_32px_-20px_rgba(15,23,42,0.45)]">
-          <canvas ref={canvasRef} className="block max-w-full" />
+      <div className="mx-auto w-full overflow-visible">
+        <div
+          className="relative mx-auto overflow-visible"
+          style={viewport ? { width: `${viewport.width}px`, maxWidth: "100%" } : undefined}
+        >
+          <div className="overflow-hidden rounded-[1rem] border border-border/70 bg-muted/20 shadow-[0_12px_32px_-20px_rgba(15,23,42,0.45)]">
+            <canvas ref={canvasRef} className="block h-auto w-full" />
+          </div>
           {pageStatus?.[pageNumber - 1] && (
             <PageStatusBadge
               stage={pageStatus[pageNumber - 1].stage}
@@ -337,112 +362,100 @@ function PdfPageCanvas({
               errorMessage={pageStatus[pageNumber - 1].errorMessage}
             />
           )}
-        </div>
-        {viewport ? (
-          <div
-            ref={overlayRef}
-            className={cn(
-              "absolute inset-0 select-none touch-none overflow-visible",
-              drawMode ? "cursor-crosshair" : "cursor-default"
-            )}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={finishDraft}
-            onPointerLeave={finishDraft}
-          >
-            {overlayBoxes.map((box, index) => {
-              const isSelected = selectedSuggestionId === box.id;
-              const isHovered = hoveredBoxId === box.id;
-              const hoverCardLayout = overlayViewport ? getHoverCardLayout(box, overlayViewport) : null;
+          {viewport ? (
+            <div
+              ref={overlayRef}
+              className={cn(
+                "absolute inset-0 z-10 select-none touch-none overflow-visible",
+                drawMode ? "cursor-crosshair" : "cursor-default"
+              )}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={finishDraft}
+              onPointerLeave={finishDraft}
+            >
+              {overlayBoxes.map((box, index) => {
+                const isSelected = selectedSuggestionId === box.id;
+                const isHovered = hoveredBoxId === box.id;
+                const hoverCardLayout = overlayViewport ? getHoverCardLayout(box, overlayViewport) : null;
 
-              return (
-                <div
-                  key={`${box.id}-${index}`}
-                  className="group absolute overflow-visible"
-                  style={{
-                    left: `${box.left}px`,
-                    top: `${box.top}px`,
-                    width: `${box.width}px`,
-                    height: `${box.height}px`,
-                  }}
-                  onMouseEnter={() => {
-                    setHoveredBoxId(box.id);
-                    onSuggestionSelect?.(box.id);
-                  }}
-                  onMouseLeave={() => setHoveredBoxId(null)}
-                >
-                  {/* Rect button */}
-                  <button
-                    type="button"
-                    className={cn(
-                      "absolute inset-0 rounded-md border transition-all duration-150",
-                      box.approved
-                        ? "border-emerald-500/90 bg-emerald-400/15 shadow-[0_0_0_1px_rgba(16,185,129,0.18)]"
-                        : "border-amber-500/90 bg-amber-300/14 shadow-[0_0_0_1px_rgba(245,158,11,0.18)]",
-                      box.source === "manual" && "border-sky-500/90 bg-sky-400/14 shadow-[0_0_0_1px_rgba(14,165,233,0.18)]",
-                      isSelected && "ring-2 ring-offset-1 ring-slate-950/35",
-                      isHovered && "shadow-[0_0_0_1px_rgba(15,23,42,0.08),0_10px_24px_-14px_rgba(15,23,42,0.45)]"
-                    )}
-                    onClick={() => onSuggestionSelect?.(box.id)}
-                    onFocus={() => setHoveredBoxId(box.id)}
-                    aria-label={`Review redaction suggestion: ${box.text || "Manual redaction"}`}
-                  />
-
-                  {/* Tooltip on hover */}
-                  {isHovered && hoverCardLayout ? (
-                    <div
+                return (
+                  <div
+                    key={`${box.id}-${index}`}
+                    className="group absolute overflow-visible"
+                    style={overlayViewport ? getRelativeRectStyle(box, overlayViewport) : undefined}
+                    onMouseEnter={() => {
+                      setHoveredBoxId(box.id);
+                      onSuggestionSelect?.(box.id);
+                    }}
+                    onMouseLeave={() => setHoveredBoxId(null)}
+                  >
+                    <button
+                      type="button"
                       className={cn(
-                        "pointer-events-none absolute z-20 rounded-2xl border border-slate-200/80 bg-white/98 px-4 py-3 text-[0.8125rem] text-slate-700 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.45)] ring-1 ring-black/5 dark:border-slate-700/80 dark:bg-slate-950/96 dark:text-slate-100",
-                        hoverCardLayout.placeLeft ? "right-full mr-3" : "left-full ml-3",
-                        hoverCardLayout.placeAbove ? "bottom-0" : "top-0"
+                        "absolute inset-0 rounded-md border transition-all duration-150",
+                        box.approved
+                          ? "border-emerald-500/90 bg-emerald-400/15 shadow-[0_0_0_1px_rgba(16,185,129,0.18)]"
+                          : "border-amber-500/90 bg-amber-300/14 shadow-[0_0_0_1px_rgba(245,158,11,0.18)]",
+                        box.source === "manual" && "border-sky-500/90 bg-sky-400/14 shadow-[0_0_0_1px_rgba(14,165,233,0.18)]",
+                        isSelected && "ring-2 ring-offset-1 ring-slate-950/35",
+                        isHovered && "shadow-[0_0_0_1px_rgba(15,23,42,0.08),0_10px_24px_-14px_rgba(15,23,42,0.45)]"
                       )}
-                      style={{ width: `${hoverCardLayout.width}px`, maxWidth: "calc(100vw - 2rem)" }}
-                    >
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <span className="text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
-                          {box.source === "manual" ? "Manual redaction" : "AI suggestion"}
-                        </span>
-                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                          {box.category || "Sensitive"}
-                        </span>
-                      </div>
-                      <div className="mb-1.5 text-sm font-semibold leading-5 text-slate-950 dark:text-white">
-                        {box.text || "Manual redaction"}
-                      </div>
-                      <div className="text-[0.78rem] leading-5 text-slate-600 dark:text-slate-300 break-words">
-                        {box.reasoning || "Review this region and confirm whether it should remain redacted."}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
+                      onClick={() => onSuggestionSelect?.(box.id)}
+                      onFocus={() => setHoveredBoxId(box.id)}
+                      aria-label={`Review redaction suggestion: ${box.text || "Manual redaction"}`}
+                    />
 
-            {draftRect ? (
-              <div
-                className="absolute border-2 border-sky-500 bg-sky-400/15"
-                style={{
-                  left: `${draftRect.left}px`,
-                  top: `${draftRect.top}px`,
-                  width: `${draftRect.width}px`,
-                  height: `${draftRect.height}px`,
-                }}
-              />
-            ) : null}
+                    {isHovered && hoverCardLayout ? (
+                      <div
+                        className={cn(
+                          "pointer-events-none absolute z-20 rounded-2xl border border-slate-200/80 bg-white/98 px-4 py-3 text-[0.8125rem] text-slate-700 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.45)] ring-1 ring-black/5 dark:border-slate-700/80 dark:bg-slate-950/96 dark:text-slate-100",
+                          hoverCardLayout.placeLeft ? "right-full mr-3" : "left-full ml-3",
+                          hoverCardLayout.placeAbove ? "bottom-0" : "top-0"
+                        )}
+                        style={{ width: `${hoverCardLayout.width}px`, maxWidth: "calc(100vw - 2rem)" }}
+                      >
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <span className="text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
+                            {box.source === "manual" ? "Manual redaction" : "AI suggestion"}
+                          </span>
+                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                            {box.category || "Sensitive"}
+                          </span>
+                        </div>
+                        <div className="mb-1.5 text-sm font-semibold leading-5 text-slate-950 dark:text-white">
+                          {box.text || "Manual redaction"}
+                        </div>
+                        <div className="text-[0.78rem] leading-5 text-slate-600 dark:text-slate-300 break-words">
+                          {box.reasoning || "Review this region and confirm whether it should remain redacted."}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
 
-            {overlayViewport && searchMatches && searchMatches.length > 0 ? (
-              <SearchHighlightOverlay
-                matches={searchMatches}
-                onMatchClick={(match) => {
-                  onSearchMatchRedacted?.(match);
-                }}
-                viewport={overlayViewport}
-                pageNumber={pageNumber}
-                activeMatchId={activeSearchMatchId}
-              />
-            ) : null}
-          </div>
-        ) : null}
+              {draftRect && overlayViewport ? (
+                <div
+                  className="absolute border-2 border-sky-500 bg-sky-400/15"
+                  style={getRelativeRectStyle(draftRect, overlayViewport)}
+                />
+              ) : null}
+
+              {overlayViewport && searchMatches && searchMatches.length > 0 ? (
+                <SearchHighlightOverlay
+                  matches={searchMatches}
+                  onMatchClick={(match) => {
+                    onSearchMatchRedacted?.(match);
+                  }}
+                  viewport={overlayViewport}
+                  pageNumber={pageNumber}
+                  activeMatchId={activeSearchMatchId}
+                />
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -476,7 +489,7 @@ export function PdfDocumentViewer({
     }
 
     const updateWidth = () => {
-      const nextWidth = Math.max(320, Math.min(960, node.clientWidth - 24));
+      const nextWidth = Math.max(280, Math.min(960, node.clientWidth - 64));
       setRenderWidth(nextWidth);
     };
 

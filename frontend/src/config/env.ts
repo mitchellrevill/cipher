@@ -14,6 +14,7 @@ export const ENV = {
   MSAL_CLIENT_ID: import.meta.env.VITE_MSAL_CLIENT_ID || "",
   MSAL_AUTHORITY: import.meta.env.VITE_MSAL_AUTHORITY || "",
   MSAL_REDIRECT_URI: import.meta.env.VITE_MSAL_REDIRECT_URI || window.location.origin,
+  MSAL_API_SCOPE: import.meta.env.VITE_MSAL_API_SCOPE || "",
 } as const;
 
 export const isDevelopment = ENV.DEV;

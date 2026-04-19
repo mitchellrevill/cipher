@@ -1,13 +1,7 @@
-/**
- * Login page with MSAL integration
- */
-
-import { useEffect, useState } from "react";
-import { useMsal } from "@azure/msal-react";
-import { AlertCircle, Info } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
-import { accountToUser, isMsalConfigured, loginRequest } from "@/auth/msal";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Input, Label } from "@/components/ui";
+import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, Info, Loader2, LogIn } from "lucide-react";
+import { isMsalConfigured, startLoginRedirect } from "@/auth/msal";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui";
 import { useAuthStore } from "@/store";
 import { toast } from "sonner";
 
@@ -18,34 +12,33 @@ const AUTH_REASON_MESSAGES: Record<string, { tone: "info" | "error"; message: st
   "auth-error": { tone: "error", message: "Authentication is not fully configured yet. Check your MSAL environment settings." },
 };
 
+function normalizeRedirectTarget(rawTarget: string | null): string {
+  if (!rawTarget) {
+    return "/jobs";
+  }
+
+  try {
+    const resolved = new URL(rawTarget, window.location.origin);
+    if (resolved.origin !== window.location.origin) {
+      return "/jobs";
+    }
+
+    return `${resolved.pathname}${resolved.search}${resolved.hash}` || "/jobs";
+  } catch {
+    return rawTarget.startsWith("/") ? rawTarget : "/jobs";
+  }
+}
+
 export default function LoginRoute() {
-  const { instance } = useMsal();
-  const navigate = useNavigate();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const authError = useAuthStore((state) => state.error);
-  const setToken = useAuthStore((state) => state.setToken);
-  const setUser = useAuthStore((state) => state.setUser);
-  const setMsalAccount = useAuthStore((state) => state.setMsalAccount);
   const setError = useAuthStore((state) => state.setError);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const setLoading = useAuthStore((state) => state.setLoading);
   const [isLoading, setIsLoading] = useState(false);
-  const searchParams = new URLSearchParams(window.location.search);
-  const redirectTarget = searchParams.get("redirect") || "/jobs";
+  const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const redirectTarget = normalizeRedirectTarget(searchParams.get("redirect"));
   const authReason = searchParams.get("reason") || "";
   const reasonDetails = AUTH_REASON_MESSAGES[authReason];
   const activeMessage = authError || reasonDetails?.message || null;
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      const nextTarget = redirectTarget.startsWith("/") ? redirectTarget : "/jobs";
-      if (nextTarget.startsWith("/")) {
-        void navigate({ to: nextTarget, replace: true });
-      } else {
-        window.location.assign(redirectTarget);
-      }
-    }
-  }, [isAuthenticated, navigate, redirectTarget]);
 
   useEffect(() => {
     if (!authReason || authReason === "signed-out") {
@@ -63,41 +56,10 @@ export default function LoginRoute() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setLoading(true);
     setError(null);
     try {
-      if (import.meta.env.DEV) {
-        setUser({
-          id: "dev-user-123",
-          email: email || "dev@example.com",
-          name: "Developer",
-          roles: ["admin"],
-        });
-        setMsalAccount(null);
-        setToken("dev-token-bypass");
-        await navigate({ to: redirectTarget.startsWith("/") ? redirectTarget : "/jobs", replace: true });
-        return;
-      }
-
-      if (!isMsalConfigured) {
-        throw new Error("MSAL is not configured. Set the VITE_MSAL_* environment variables.");
-      }
-
-      const result = await instance.loginPopup(loginRequest);
-      const account = result.account;
-      if (!account) {
-        throw new Error("Microsoft sign-in did not return an account.");
-      }
-
-      instance.setActiveAccount(account);
-      setMsalAccount(account);
-      setUser(accountToUser(account));
-      setToken(null);
-
-      if (redirectTarget.startsWith("/")) {
-        await navigate({ to: redirectTarget, replace: true });
-      } else {
-        window.location.assign(redirectTarget);
-      }
+      await startLoginRedirect(redirectTarget);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Sign-in failed. Please try again.";
       setError(message);
@@ -105,64 +67,32 @@ export default function LoginRoute() {
       console.error("Login failed", error);
     } finally {
       setIsLoading(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="flex-1 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Sign In</CardTitle>
-          <CardDescription>
-            {import.meta.env.DEV
-              ? "Use any local credentials to enter development mode."
-              : "Sign in with your Microsoft account to access Cipher."}
-          </CardDescription>
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8 text-foreground">
+      <Card className="w-full max-w-md border-border/70 shadow-lg">
+        <CardHeader className="space-y-2 text-center">
+          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-muted text-sm font-semibold">
+            C
+          </div>
+          <CardTitle className="text-2xl">Sign in</CardTitle>
+          <CardDescription>Use your Microsoft account to continue to Cipher.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            {activeMessage ? (
-              <div
-                className={
-                  reasonDetails?.tone === "error" || authError
-                    ? "flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-                    : "flex items-start gap-3 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-700 dark:text-sky-300"
-                }
-              >
-                {reasonDetails?.tone === "error" || authError ? (
-                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                ) : (
-                  <Info className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                )}
-                <p>{activeMessage}</p>
-              </div>
-            ) : null}
-            {import.meta.env.DEV ? (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
-              </>
-            ) : null}
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Signing in..." : import.meta.env.DEV ? "Sign In" : "Continue with Microsoft"}
+        <CardContent className="space-y-4">
+          {activeMessage ? (
+            <div className={reasonDetails?.tone === "error" || authError ? "flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" : "flex items-start gap-3 rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground"}>
+              {reasonDetails?.tone === "error" || authError ? <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" /> : <Info className="mt-0.5 h-4 w-4 flex-shrink-0" />}
+              <p>{activeMessage}</p>
+            </div>
+          ) : null}
+
+          <form onSubmit={handleLogin}>
+            <Button type="submit" className="h-11 w-full" disabled={isLoading || !isMsalConfigured}>
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
+              {isLoading ? "Signing in..." : isMsalConfigured ? "Continue with Microsoft" : "Configure Microsoft sign-in"}
             </Button>
           </form>
         </CardContent>

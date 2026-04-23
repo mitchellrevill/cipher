@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock
-from redactor.pipeline.fuzzy_matcher import find_text_rects, merge_line_rects
-from redactor.models import RedactionRect
+from app.pipeline.fuzzy_matcher import find_text_rects, merge_line_rects
+from app.models import RedactionRect
 
 def _make_word(content: str, x0_pts: float, y0_pts: float, x1_pts: float, y1_pts: float):
     """Helper: simulate a Document Intelligence word object with polygon in inches."""

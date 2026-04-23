@@ -1,7 +1,7 @@
 # tests/test_config.py
 import pytest
 from pydantic import ValidationError
-from redactor.config import Settings, get_settings
+from app.config import Settings, get_settings
 
 @pytest.fixture(autouse=True)
 def clear_settings_cache():

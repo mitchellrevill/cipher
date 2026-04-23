@@ -2,8 +2,8 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from redactor.auth import CurrentUser, get_current_user
-from redactor.config import get_settings
+from app.auth import CurrentUser, get_current_user
+from app.config import get_settings
 
 
 @pytest.fixture(autouse=True)

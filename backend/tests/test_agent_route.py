@@ -3,7 +3,7 @@ import json
 import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import patch
-from redactor.models import Job, JobStatus
+from app.models import Job, JobStatus
 
 
 # Note: All service and container mocks are now defined in conftest.py

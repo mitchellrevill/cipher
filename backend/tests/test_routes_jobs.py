@@ -3,7 +3,7 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, patch
 from datetime import datetime
-from redactor.models import Job, JobStatus
+from app.models import Job, JobStatus
 
 
 # Note: Service and container mocks are now defined in conftest.py

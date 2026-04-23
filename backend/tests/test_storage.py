@@ -1,8 +1,8 @@
 import pytest
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
-from redactor.storage.blob import BlobStorageClient
-from redactor.models import Suggestion, RedactionRect
+from app.storage.blob import BlobStorageClient
+from app.models import Suggestion, RedactionRect
 
 @pytest.fixture
 def blob_client():

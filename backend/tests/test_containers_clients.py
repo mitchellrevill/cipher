@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch
-from redactor.containers.clients import ClientsContainer
+from app.containers.clients import ClientsContainer
 
 @patch('redactor.containers.clients.CosmosClient')
 @patch('redactor.containers.clients.AzureOpenAIResponsesClient')

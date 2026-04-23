@@ -12,14 +12,14 @@ from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, MagicMock
 from unittest.mock import patch
 
-from redactor.auth import CurrentUser, get_current_user
-from redactor.containers.app import AppContainer
-from redactor.config import get_settings
-from redactor.models import Job, JobStatus, Suggestion, RedactionRect
-from redactor.services.agent_service import AgentService
-from redactor.services.job_service import JobService
-from redactor.services.redaction_service import RedactionService
-from redactor.services.workspace_service import WorkspaceService
+from app.auth import CurrentUser, get_current_user
+from app.containers.app import AppContainer
+from app.config import get_settings
+from app.models import Job, JobStatus, Suggestion, RedactionRect
+from app.services.agent_service import AgentService
+from app.services.job_service import JobService
+from app.services.redaction_service import RedactionService
+from app.services.workspace_service import WorkspaceService
 
 
 # ============================================================================
@@ -176,7 +176,7 @@ def test_app(mock_container, mock_blob_client, test_current_user):
     This is the primary fixture for route testing. It includes all routers
     and uses the mock_container for dependency injection.
     """
-    from redactor.routes import jobs, redactions, agent, workspaces
+    from app.routes import jobs, redactions, agent, workspaces
     from fastapi.middleware.cors import CORSMiddleware
 
     @asynccontextmanager
@@ -219,7 +219,7 @@ def test_app_jobs_only(mock_container, mock_blob_client, test_current_user):
 
     Use this fixture when testing jobs route in isolation.
     """
-    from redactor.routes import jobs
+    from app.routes import jobs
     from fastapi.middleware.cors import CORSMiddleware
 
     @asynccontextmanager
@@ -253,7 +253,7 @@ def test_app_redactions_only(mock_container, test_current_user):
 
     Use this fixture when testing redactions route in isolation.
     """
-    from redactor.routes import redactions
+    from app.routes import redactions
     from fastapi.middleware.cors import CORSMiddleware
 
     @asynccontextmanager
@@ -285,7 +285,7 @@ def test_app_agent_only(mock_container, test_current_user):
 
     Use this fixture when testing agent route in isolation.
     """
-    from redactor.routes import agent
+    from app.routes import agent
     from fastapi.middleware.cors import CORSMiddleware
 
     @asynccontextmanager

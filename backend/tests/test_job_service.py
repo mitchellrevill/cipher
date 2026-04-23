@@ -2,8 +2,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
-from redactor.services.job_service import JobService
-from redactor.models import JobStatus
+from app.services.job_service import JobService
+from app.models import JobStatus
 
 
 def make_cosmos():

@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from redactor.pipeline.pii_service import PIIServiceClient
+from app.pipeline.pii_service import PIIServiceClient
 
 @pytest.fixture
 def mock_pii_result():

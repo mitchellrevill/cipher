@@ -2,8 +2,8 @@ import json
 import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from redactor.agent.tools.workspace import WorkspaceTools
-from redactor.models import Suggestion, RedactionRect
+from app.agent.tools.workspace import WorkspaceTools
+from app.models import Suggestion, RedactionRect
 from datetime import datetime
 
 

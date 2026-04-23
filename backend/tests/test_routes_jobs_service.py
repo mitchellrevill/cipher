@@ -3,7 +3,7 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, patch
 from datetime import datetime
-from redactor.models import Job, JobStatus
+from app.models import Job, JobStatus
 
 
 # Note: All service and container mocks are now defined in conftest.py
@@ -164,8 +164,8 @@ async def test_download_returns_404_when_pdf_not_found(mock_blob_client, test_ap
 @pytest.mark.asyncio
 async def test_run_job_updates_service_status(mock_job_service, mock_blob_client):
     """Verify _run_job calls service update methods."""
-    from redactor.routes.jobs import _run_job
-    from redactor.models import Suggestion
+    from app.routes.jobs import _run_job
+    from app.models import Suggestion
 
     pdf_bytes = b"PDF content"
     job_id = "job-xyz"
@@ -197,7 +197,7 @@ async def test_run_job_updates_service_status(mock_job_service, mock_blob_client
 @pytest.mark.asyncio
 async def test_run_job_handles_pipeline_error(mock_job_service, mock_blob_client):
     """Verify _run_job marks job as failed on pipeline error."""
-    from redactor.routes.jobs import _run_job
+    from app.routes.jobs import _run_job
 
     job_id = "job-error"
 
@@ -215,8 +215,8 @@ async def test_run_job_handles_pipeline_error(mock_job_service, mock_blob_client
 
 @pytest.mark.asyncio
 async def test_run_job_does_not_call_update_suggestions(mock_job_service, mock_blob_client):
-    from redactor.routes.jobs import _run_job
-    from redactor.models import Suggestion
+    from app.routes.jobs import _run_job
+    from app.models import Suggestion
 
     suggestions = [
         Suggestion(

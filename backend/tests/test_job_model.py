@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from redactor.models import Job, JobStatus
+from app.models import Job, JobStatus
 
 
 def test_job_has_blob_path_fields():

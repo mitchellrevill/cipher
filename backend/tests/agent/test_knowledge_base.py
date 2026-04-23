@@ -1,5 +1,5 @@
 import pytest
-from redactor.agent.knowledge_base import KnowledgeBase
+from app.agent.knowledge_base import KnowledgeBase
 
 
 @pytest.mark.asyncio

@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from redactor.agent.tools.suggestions import SuggestionTools
-from redactor.models import RedactionRect, Suggestion
+from app.agent.tools.suggestions import SuggestionTools
+from app.models import RedactionRect, Suggestion
 
 
 def make_suggestion(sid="s1", text="John Smith", category="PII", approved=False):

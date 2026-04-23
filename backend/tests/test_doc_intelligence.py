@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from redactor.pipeline.doc_intelligence import DocIntelligenceClient
+from app.pipeline.doc_intelligence import DocIntelligenceClient
 
 @pytest.fixture
 def mock_analyse_result():

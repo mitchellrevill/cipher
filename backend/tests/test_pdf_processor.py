@@ -2,8 +2,8 @@ import io
 import pytest
 import fitz
 import pypdfium2 as pdfium
-from redactor.pdf.processor import PDFProcessor
-from redactor.models import RedactionRect
+from app.pdf.processor import PDFProcessor
+from app.models import RedactionRect
 
 @pytest.fixture
 def sample_pdf_bytes():

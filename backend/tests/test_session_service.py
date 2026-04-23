@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from redactor.services.session_service import SessionService
+from app.services.session_service import SessionService
 
 
 def make_blob():

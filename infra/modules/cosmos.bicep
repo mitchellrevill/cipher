@@ -49,15 +49,6 @@ resource jobsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/conta
         ]
         kind: 'Hash'
       }
-      uniqueKeyPolicy: {
-        uniqueKeys: [
-          {
-            paths: [
-              '/id'
-            ]
-          }
-        ]
-      }
     }
   }
 }

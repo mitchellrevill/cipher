@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from redactor.models import Workspace, WorkspaceExclusion, WorkspaceRule
+from app.models import Workspace, WorkspaceExclusion, WorkspaceRule
 
 
 def test_workspace_creation():

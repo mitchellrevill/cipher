@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from redactor.db.cosmos_init import (
+from app.db.cosmos_init import (
     initialize_database,
     initialize_collection,
     setup_cosmos_db,

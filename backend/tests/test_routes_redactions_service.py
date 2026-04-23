@@ -3,9 +3,9 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import patch, AsyncMock, MagicMock
 from datetime import datetime
-from redactor.models import Job, JobStatus, Suggestion, RedactionRect
-from redactor.services.redaction_service import RedactionService
-from redactor.services.job_service import JobService
+from app.models import Job, JobStatus, Suggestion, RedactionRect
+from app.services.redaction_service import RedactionService
+from app.services.job_service import JobService
 
 
 # Note: All service and container mocks are now defined in conftest.py
@@ -60,9 +60,9 @@ def test_app_redactions_service(seeded_job_service, mock_redaction_service, mock
     from contextlib import asynccontextmanager
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
-    from redactor.routes import redactions
-    from redactor.config import get_settings
-    from redactor.containers.app import AppContainer
+    from app.routes import redactions
+    from app.config import get_settings
+    from app.containers.app import AppContainer
 
     # Create a container with seeded services (matching conftest.py pattern)
     container = MagicMock()  # Don't use spec to allow arbitrary attribute assignment

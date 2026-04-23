@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock
 import pytest
 import fitz
 
-from redactor.models import RedactionRect, Suggestion
-from redactor.services.rule_engine import RuleEngine
+from app.models import RedactionRect, Suggestion
+from app.services.rule_engine import RuleEngine
 
 
 def _suggestion(*, suggestion_id: str, text: str, page_num: int = 1, approved: bool = False) -> Suggestion:

@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
-from redactor.main import app
+from app.main import app
 
 
 def test_app_lifespan_initializes_container():

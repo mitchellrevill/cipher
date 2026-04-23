@@ -1,8 +1,8 @@
 import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from redactor.agent.tools.search import DocumentTools, _build_query_variants
-from redactor.models import Suggestion, RedactionRect
+from app.agent.tools.search import DocumentTools, _build_query_variants
+from app.models import Suggestion, RedactionRect
 from datetime import datetime
 
 

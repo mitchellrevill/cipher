@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from dependency_injector import providers
-from redactor.containers.app import AppContainer
+from app.containers.app import AppContainer
 
 def test_app_container_wires_both_layers():
     """Verify AppContainer composes both ClientsContainer and ServicesContainer."""

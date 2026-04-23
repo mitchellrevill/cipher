@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from redactor.services.workspace_service import WorkspaceService
-from redactor.services.job_service import JobService
+from app.services.workspace_service import WorkspaceService
+from app.services.job_service import JobService
 
 
 def make_containers():

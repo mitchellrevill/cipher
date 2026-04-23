@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from redactor.pipeline.openai_client import OpenAIRedactionClient
+from app.pipeline.openai_client import OpenAIRedactionClient
 
 @pytest.fixture
 def client():

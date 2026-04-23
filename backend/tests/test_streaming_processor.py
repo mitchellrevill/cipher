@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from redactor.pipeline.page_processor import StreamingPageProcessor, PageProcessingStage
-from redactor.models import PageStatusEvent, SuggestionFoundEvent
+from app.pipeline.page_processor import StreamingPageProcessor, PageProcessingStage
+from app.models import PageStatusEvent, SuggestionFoundEvent
 
 
 @pytest.fixture

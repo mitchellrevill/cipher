@@ -1,13 +1,13 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from dependency_injector import providers
-import redactor.containers.services as services_module
-from redactor.containers.services import ServicesContainer
-from redactor.containers.clients import ClientsContainer
-from redactor.services.job_service import JobService
-from redactor.services.redaction_service import RedactionService
-from redactor.services.agent_service import AgentService
-from redactor.services.workspace_service import WorkspaceService
+import app.containers.services as services_module
+from app.containers.services import ServicesContainer
+from app.containers.clients import ClientsContainer
+from app.services.job_service import JobService
+from app.services.redaction_service import RedactionService
+from app.services.agent_service import AgentService
+from app.services.workspace_service import WorkspaceService
 
 @pytest.fixture
 def test_config():

@@ -2,11 +2,11 @@
 import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-import redactor.services.agent_service as agent_service_module
-from redactor.services.agent_service import AgentService
-from redactor.services.job_service import JobService
-from redactor.services.session_service import SessionService
-from redactor.services.workspace_service import WorkspaceService
+import app.services.agent_service as agent_service_module
+from app.services.agent_service import AgentService
+from app.services.job_service import JobService
+from app.services.session_service import SessionService
+from app.services.workspace_service import WorkspaceService
 
 
 class FakeResponseStream:

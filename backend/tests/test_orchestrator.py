@@ -1,8 +1,8 @@
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
-from redactor.pipeline.orchestrator import run_pipeline
-from redactor.config import Settings
+from app.pipeline.orchestrator import run_pipeline
+from app.config import Settings
 from datetime import datetime
 
 @pytest.fixture

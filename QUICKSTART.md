@@ -201,4 +201,3 @@ npm run lint
 - Frontend source: `frontend/src`
 - Backend env example: `backend/.env.example`
 
-If you'd like, I can also add a single-script `dev` helper (docker-compose or Makefile) to start both services together.

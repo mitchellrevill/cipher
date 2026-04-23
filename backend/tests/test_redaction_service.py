@@ -2,8 +2,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
-from redactor.services.redaction_service import RedactionService
-from redactor.models import Suggestion, RedactionRect
+from app.services.redaction_service import RedactionService
+from app.models import Suggestion, RedactionRect
 
 
 @pytest.fixture

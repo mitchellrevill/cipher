@@ -9,6 +9,8 @@ param environment string
 param appName string = 'redactor'
 param location string = 'uksouth'
 param aiLocation string = 'swedencentral'
+param staticWebLocation string = 'westus2'
+param resourceGroupName string = 'rg-${environment}-${appName}-${location}'
 
 @allowed([
   'B2'
@@ -38,7 +40,7 @@ var regionAbbrev = location == 'uksouth' ? 'uks' : location
 var aiRegionAbbrev = aiLocation == 'swedencentral' ? 'swec' : aiLocation
 
 var normalizedAppName = toLower(replace(appName, '-', ''))
-var rgName = 'rg-${appName}-${environment}-${regionAbbrev}'
+var rgName = resourceGroupName
 var acrName = 'cr${normalizedAppName}${environment}${regionAbbrev}'
 var storageName = 'st${normalizedAppName}${environment}${regionAbbrev}'
 var cosmosName = 'cosmos-${appName}-${environment}-${regionAbbrev}'
@@ -112,7 +114,7 @@ module swa 'modules/staticweb.bicep' = {
   name: 'swa'
   params: {
     name: swaName
-    location: location
+    location: staticWebLocation
     sku: environment == 'prod' ? 'Standard' : 'Free'
   }
 }

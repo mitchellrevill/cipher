@@ -7,7 +7,7 @@ from typing import Annotated, Awaitable, Callable, Optional
 from agent_framework import tool
 from pydantic import Field
 
-from backend.app.models import Suggestion
+from app.models import Suggestion
 
 logger = logging.getLogger(__name__)
 

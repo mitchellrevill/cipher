@@ -5,7 +5,7 @@ from typing import Annotated, Awaitable, Callable, Optional
 from agent_framework import tool
 from pydantic import Field
 
-from backend.app.pdf.processor import PDFProcessor
+from app.pdf.processor import PDFProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -497,7 +497,7 @@ class WorkspaceTools:
                 import uuid as _uuid
                 from datetime import datetime as _dt
 
-                from backend.app.models import Suggestion
+                from app.models import Suggestion
 
                 state, error = await self._require_workspace(workspace_id)
                 if error:

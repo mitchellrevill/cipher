@@ -7,15 +7,15 @@ import logging
 import uuid
 from typing import Any, AsyncIterator, Optional
 
-from backend.app.agent.tools.search import DocumentTools
-from backend.app.agent.tools.suggestions import SuggestionTools
-from backend.app.agent.tools.workspace import WorkspaceTools
-from backend.app.agent.knowledge_base import KnowledgeBase
-from backend.app.services.job_service import JobService
-from backend.app.services.redaction_service import RedactionService
-from backend.app.services.rule_engine import RuleEngine
-from backend.app.services.session_service import SessionService
-from backend.app.services.workspace_service import WorkspaceService
+from app.agent.tools.search import DocumentTools
+from app.agent.tools.suggestions import SuggestionTools
+from app.agent.tools.workspace import WorkspaceTools
+from app.agent.knowledge_base import KnowledgeBase
+from app.services.job_service import JobService
+from app.services.redaction_service import RedactionService
+from app.services.rule_engine import RuleEngine
+from app.services.session_service import SessionService
+from app.services.workspace_service import WorkspaceService
 
 logger = logging.getLogger(__name__)
 _active_session_id: contextvars.ContextVar[str | None] = contextvars.ContextVar("active_agent_session_id", default=None)

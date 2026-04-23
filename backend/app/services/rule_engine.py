@@ -6,8 +6,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from backend.app.models import Suggestion
-from backend.app.pdf.processor import PDFProcessor
+from app.models import Suggestion
+from app.pdf.processor import PDFProcessor
 
 
 @dataclass(slots=True)

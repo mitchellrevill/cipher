@@ -3,7 +3,7 @@ import re
 from typing import Optional
 import fitz  # PyMuPDF
 from PIL import Image
-from backend.app.models import RedactionRect
+from app.models import RedactionRect
 
 
 class PDFProcessor:

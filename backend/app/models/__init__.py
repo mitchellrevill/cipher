@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from enum import Enum
 from typing import Literal, Optional
 from datetime import datetime
-from backend.app.models.workspace import Workspace, WorkspaceRule, WorkspaceExclusion
+from app.models.workspace import Workspace, WorkspaceRule, WorkspaceExclusion
 
 # Existing models from original models.py
 
@@ -48,7 +48,7 @@ class Job(BaseModel):
     output_blob_path: Optional[str] = None
 
 # New streaming models
-from backend.app.models.streaming import (
+from app.models.streaming import (
     PageProcessingStage,
     PageStatusEvent,
     SuggestionFoundEvent,

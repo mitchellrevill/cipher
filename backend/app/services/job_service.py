@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from backend.app.models import Job, JobStatus
+from app.models import Job, JobStatus
 
 logger = logging.getLogger(__name__)
 

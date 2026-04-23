@@ -10,8 +10,8 @@ All routes and services access dependencies through this container.
 """
 
 from dependency_injector import containers, providers
-from backend.app.containers.clients import ClientsContainer
-from backend.app.containers.services import ServicesContainer
+from app.containers.clients import ClientsContainer
+from app.containers.services import ServicesContainer
 
 
 class AppContainer(containers.DeclarativeContainer):

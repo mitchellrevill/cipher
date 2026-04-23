@@ -3,7 +3,7 @@
 from collections.abc import Iterable
 from typing import Optional
 from datetime import datetime
-from backend.app.models import Suggestion
+from app.models import Suggestion
 
 
 class RedactionService:

@@ -5,7 +5,7 @@ from collections import Counter
 from typing import Annotated, Awaitable, Callable, Optional
 from agent_framework import tool
 from pydantic import Field
-from backend.app.pdf.processor import PDFProcessor
+from app.pdf.processor import PDFProcessor
 
 logger = logging.getLogger(__name__)
 

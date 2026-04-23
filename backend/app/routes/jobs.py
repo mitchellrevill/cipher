@@ -6,14 +6,14 @@ from typing import Annotated
 from uuid import UUID
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Request, Depends
 from fastapi.responses import StreamingResponse
-from backend.app.auth import CurrentUser, get_current_user
-from backend.app.config import get_settings
-from backend.app.models import Job, JobStatus, PageStatusEvent, SuggestionFoundEvent
-from backend.app.services.job_service import JobService
-from backend.app.services.redaction_service import RedactionService
-from backend.app.services.workspace_service import WorkspaceService
-from backend.app.storage.blob import BlobStorageClient, InMemoryBlobStorageClient, get_blob_storage
-from backend.app.pipeline.orchestrator import run_pipeline
+from app.auth import CurrentUser, get_current_user
+from app.config import get_settings
+from app.models import Job, JobStatus, PageStatusEvent, SuggestionFoundEvent
+from app.services.job_service import JobService
+from app.services.redaction_service import RedactionService
+from app.services.workspace_service import WorkspaceService
+from app.storage.blob import BlobStorageClient, InMemoryBlobStorageClient, get_blob_storage
+from app.pipeline.orchestrator import run_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -256,10 +256,10 @@ async def stream_analysis(
                 return
 
             # Create clients
-            from backend.app.pipeline.doc_intelligence import DocIntelligenceClient
-            from backend.app.pipeline.pii_service import PIIServiceClient
-            from backend.app.pipeline.openai_client import OpenAIRedactionClient
-            from backend.app.pipeline.page_processor import StreamingPageProcessor
+            from app.pipeline.doc_intelligence import DocIntelligenceClient
+            from app.pipeline.pii_service import PIIServiceClient
+            from app.pipeline.openai_client import OpenAIRedactionClient
+            from app.pipeline.page_processor import StreamingPageProcessor
 
             doc_client = DocIntelligenceClient(
                 settings.azure_doc_intel_endpoint,

@@ -6,9 +6,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
-from backend.app.auth import CurrentUser, get_current_user
-from backend.app.services.job_service import JobService
-from backend.app.services.workspace_service import WorkspaceService
+from app.auth import CurrentUser, get_current_user
+from app.services.job_service import JobService
+from app.services.workspace_service import WorkspaceService
 
 logger = logging.getLogger(__name__)
 

@@ -3,7 +3,7 @@ import re
 from azure.storage.blob.aio import BlobServiceClient
 from azure.identity.aio import DefaultAzureCredential
 from azure.core.exceptions import ResourceNotFoundError
-from backend.app.models import Suggestion
+from app.models import Suggestion
 
 _inmemory_blob_instance = None
 

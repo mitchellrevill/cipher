@@ -4,14 +4,14 @@ import logging
 
 from dependency_injector import containers, providers
 
-from backend.app.agent.knowledge_base import KnowledgeBase
-from backend.app.config import get_settings
-from backend.app.services.agent_service import AgentService
-from backend.app.services.job_service import JobService
-from backend.app.services.redaction_service import RedactionService
-from backend.app.services.rule_engine import RuleEngine
-from backend.app.services.session_service import SessionService
-from backend.app.services.workspace_service import WorkspaceService
+from app.agent.knowledge_base import KnowledgeBase
+from app.config import get_settings
+from app.services.agent_service import AgentService
+from app.services.job_service import JobService
+from app.services.redaction_service import RedactionService
+from app.services.rule_engine import RuleEngine
+from app.services.session_service import SessionService
+from app.services.workspace_service import WorkspaceService
 
 logger = logging.getLogger(__name__)
 

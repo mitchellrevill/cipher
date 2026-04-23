@@ -35,7 +35,7 @@ def _validate_and_create_blob(
     Returns our BlobStorageClient wrapper (not the raw Azure SDK client).
     Auth priority: explicit account key (via connection string) → credential (managed identity).
     """
-    from backend.app.storage.blob import get_blob_storage
+    from app.storage.blob import get_blob_storage
     
     if not account_url:
         raise ValueError("Azure Storage account URL required but not set in config")

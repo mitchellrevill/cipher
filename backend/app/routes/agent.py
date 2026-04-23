@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, Annotated
-from backend.app.auth import CurrentUser, get_current_user
-from backend.app.services.agent_service import AgentService
+from app.auth import CurrentUser, get_current_user
+from app.services.agent_service import AgentService
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 

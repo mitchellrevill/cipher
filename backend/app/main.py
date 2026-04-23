@@ -3,10 +3,10 @@ import asyncio
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.app.config import get_settings
-from backend.app.containers.app import AppContainer
-from backend.app.routes import agent, jobs, redactions
-from backend.app.routes import workspaces
+from app.config import get_settings
+from app.containers.app import AppContainer
+from app.routes import agent, jobs, redactions
+from app.routes import workspaces
 
 logger = logging.getLogger(__name__)
 

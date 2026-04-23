@@ -1,7 +1,7 @@
 from collections import defaultdict
 from rapidfuzz import fuzz
 import fitz  # PyMuPDF
-from backend.app.models import RedactionRect
+from app.models import RedactionRect
 
 SCALING_FACTOR = 72.0  # Document Intelligence returns inches; PDF uses points (72 per inch)
 FUZZY_THRESHOLD = 90   # Minimum score (0-100) to accept a match

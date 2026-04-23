@@ -1,12 +1,12 @@
 import asyncio
 import uuid
 import logging
-from backend.app.config import Settings
-from backend.app.models import Suggestion, RedactionRect
-from backend.app.pipeline.doc_intelligence import DocIntelligenceClient
-from backend.app.pipeline.pii_service import PIIServiceClient
-from backend.app.pipeline.openai_client import OpenAIRedactionClient
-from backend.app.pipeline.fuzzy_matcher import find_text_rects
+from app.config import Settings
+from app.models import Suggestion, RedactionRect
+from app.pipeline.doc_intelligence import DocIntelligenceClient
+from app.pipeline.pii_service import PIIServiceClient
+from app.pipeline.openai_client import OpenAIRedactionClient
+from app.pipeline.fuzzy_matcher import find_text_rects
 
 logger = logging.getLogger(__name__)
 

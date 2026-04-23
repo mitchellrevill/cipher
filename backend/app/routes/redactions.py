@@ -3,13 +3,13 @@ import uuid
 from typing import Annotated
 from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
-from backend.app.auth import CurrentUser, get_current_user
-from backend.app.models import JobStatus, RedactionRect, Suggestion
-from backend.app.pdf.processor import PDFProcessor
-from backend.app.storage.blob import BlobStorageClient, get_blob_storage
-from backend.app.config import get_settings
-from backend.app.services.redaction_service import RedactionService
-from backend.app.services.job_service import JobService
+from app.auth import CurrentUser, get_current_user
+from app.models import JobStatus, RedactionRect, Suggestion
+from app.pdf.processor import PDFProcessor
+from app.storage.blob import BlobStorageClient, get_blob_storage
+from app.config import get_settings
+from app.services.redaction_service import RedactionService
+from app.services.job_service import JobService
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 

@@ -13,7 +13,7 @@ from urllib.request import urlopen
 import jwt
 from fastapi import HTTPException, Request, status
 
-from backend.app.config import get_settings
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 

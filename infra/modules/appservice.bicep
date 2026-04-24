@@ -2,16 +2,18 @@ param planName string
 param appName string
 param location string
 param sku string
-param acrLoginServer string
+param pythonVersion string = '3.12'
 param cosmosEndpoint string
 param cosmosDbName string
 param storageAccountUrl string
-param foundryEndpoint string
 param foundryOpenaiEndpoint string
+param docIntelEndpoint string
+param languageEndpoint string
 param openaiDeployment string
 param openaiApiVersion string
 param foundryKeySecretUri string
 param corsOrigins string
+param startupCommand string = 'gunicorn --bind 0.0.0.0:8000 --workers 2 --worker-class uvicorn.workers.UvicornWorker app.main:app'
 
 resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: planName
@@ -28,7 +30,7 @@ resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
 resource app 'Microsoft.Web/sites@2023-12-01' = {
   name: appName
   location: location
-  kind: 'app,linux,container'
+  kind: 'app,linux'
   identity: {
     type: 'SystemAssigned'
   }
@@ -36,20 +38,24 @@ resource app 'Microsoft.Web/sites@2023-12-01' = {
     serverFarmId: plan.id
     httpsOnly: true
     siteConfig: {
-      linuxFxVersion: 'DOCKER|${acrLoginServer}/redactor-api:latest'
-      acrUseManagedIdentityCreds: true
+      linuxFxVersion: 'PYTHON|${pythonVersion}'
+      appCommandLine: startupCommand
       appSettings: [
-        {
-          name: 'DOCKER_REGISTRY_SERVER_URL'
-          value: 'https://${acrLoginServer}'
-        }
         {
           name: 'AZURE_ENV'
           value: 'production'
         }
         {
+          name: 'ENV'
+          value: 'production'
+        }
+        {
           name: 'AZURE_OPENAI_ENDPOINT'
           value: foundryOpenaiEndpoint
+        }
+        {
+          name: 'AZURE_OPENAI_KEY'
+          value: '@Microsoft.KeyVault(SecretUri=${foundryKeySecretUri})'
         }
         {
           name: 'AZURE_OPENAI_DEPLOYMENT'
@@ -61,7 +67,7 @@ resource app 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'AZURE_DOC_INTEL_ENDPOINT'
-          value: foundryEndpoint
+          value: docIntelEndpoint
         }
         {
           name: 'AZURE_DOC_INTEL_KEY'
@@ -69,7 +75,7 @@ resource app 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'AZURE_LANGUAGE_ENDPOINT'
-          value: foundryEndpoint
+          value: languageEndpoint
         }
         {
           name: 'AZURE_LANGUAGE_KEY'

@@ -1,29 +1,13 @@
 param appServicePrincipalId string
-param acrName string
 param storageAccountName string
 param cosmosAccountName string
 param foundryAccountName string
 param keyVaultName string
 
-var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 var storageBlobContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var cognitiveServicesUserRoleId = 'a97b65f3-24c7-4388-baec-2e87135dc908'
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 var cosmosDataContributorRoleId = '00000000-0000-0000-0000-000000000002'
-
-resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
-  name: acrName
-}
-
-resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(acr.id, appServicePrincipalId, acrPullRoleId)
-  scope: acr
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPullRoleId)
-    principalId: appServicePrincipalId
-    principalType: 'ServicePrincipal'
-  }
-}
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
   name: storageAccountName

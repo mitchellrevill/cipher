@@ -19,12 +19,6 @@ param resourceGroupName string = 'rg-${environment}-${appName}-${location}'
 param appServiceSku string
 
 @allowed([
-  'Basic'
-  'Standard'
-])
-param acrSku string
-
-@allowed([
   'LRS'
   'GRS'
 ])
@@ -41,7 +35,6 @@ var aiRegionAbbrev = aiLocation == 'swedencentral' ? 'swec' : aiLocation
 
 var normalizedAppName = toLower(replace(appName, '-', ''))
 var rgName = resourceGroupName
-var acrName = 'cr${normalizedAppName}${environment}${regionAbbrev}'
 var storageName = 'st${normalizedAppName}${environment}${regionAbbrev}'
 var cosmosName = 'cosmos-${appName}-${environment}-${regionAbbrev}'
 var foundryName = 'ai-${appName}-${environment}-${aiRegionAbbrev}'
@@ -54,16 +47,6 @@ var swaName = 'stapp-${appName}-${environment}-${regionAbbrev}'
 resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: rgName
   location: location
-}
-
-module acr 'modules/acr.bicep' = {
-  scope: rg
-  name: 'acr'
-  params: {
-    name: acrName
-    location: location
-    sku: acrSku
-  }
 }
 
 module storage 'modules/storage.bicep' = {
@@ -120,6 +103,7 @@ module swa 'modules/staticweb.bicep' = {
 }
 
 var corsOrigins = '["https://${swa.outputs.defaultHostname}"]'
+var startupCommand = 'gunicorn --bind 0.0.0.0:8000 --workers 2 --worker-class uvicorn.workers.UvicornWorker app.main:app'
 
 module appservice 'modules/appservice.bicep' = {
   scope: rg
@@ -129,16 +113,18 @@ module appservice 'modules/appservice.bicep' = {
     appName: apiName
     location: location
     sku: appServiceSku
-    acrLoginServer: acr.outputs.loginServer
+    pythonVersion: '3.12'
     cosmosEndpoint: cosmos.outputs.endpoint
     cosmosDbName: 'redactor'
     storageAccountUrl: storage.outputs.accountUrl
-    foundryEndpoint: foundry.outputs.endpoint
     foundryOpenaiEndpoint: foundry.outputs.openaiEndpoint
+    docIntelEndpoint: foundry.outputs.docIntelEndpoint
+    languageEndpoint: foundry.outputs.languageEndpoint
     openaiDeployment: modelName
     openaiApiVersion: openaiApiVersion
     foundryKeySecretUri: keyvault.outputs.secretUri
     corsOrigins: corsOrigins
+    startupCommand: startupCommand
   }
 }
 
@@ -147,7 +133,6 @@ module roles 'modules/roles.bicep' = {
   name: 'roles'
   params: {
     appServicePrincipalId: appservice.outputs.principalId
-    acrName: acr.outputs.name
     storageAccountName: storage.outputs.name
     cosmosAccountName: cosmos.outputs.name
     foundryAccountName: foundry.outputs.name
@@ -158,6 +143,6 @@ module roles 'modules/roles.bicep' = {
 output resourceGroupName string = rg.name
 output appServiceUrl string = 'https://${appservice.outputs.defaultHostname}'
 output swaUrl string = 'https://${swa.outputs.defaultHostname}'
-output acrLoginServer string = acr.outputs.loginServer
+// ACR removed from infra
 output cosmosEndpoint string = cosmos.outputs.endpoint
 output foundryEndpoint string = foundry.outputs.endpoint

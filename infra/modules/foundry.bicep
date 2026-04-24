@@ -19,6 +19,7 @@ resource aiFoundry 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   properties: {
     allowProjectManagement: true
     customSubDomainName: name
+    publicNetworkAccess: 'Enabled'
     disableLocalAuth: disableLocalAuth
   }
 }
@@ -37,7 +38,7 @@ resource modelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-
   parent: aiFoundry
   name: modelName
   sku: {
-    name: 'GlobalStandard'
+    name: 'DataZoneStandard'
     capacity: modelCapacity
   }
   properties: {
@@ -51,6 +52,8 @@ resource modelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-
 
 output endpoint string = aiFoundry.properties.endpoint!
 output openaiEndpoint string = 'https://${name}.openai.azure.com'
+output docIntelEndpoint string = 'https://${name}.cognitiveservices.azure.com'
+output languageEndpoint string = 'https://${name}.cognitiveservices.azure.com'
 output resourceId string = aiFoundry.id
 output name string = aiFoundry.name
 

@@ -52,10 +52,8 @@ steps:
     displayName: Build frontend
     workingDirectory: $(frontend_dir)
     env:
-      VITE_BACKEND_URL: $(VITE_BACKEND_URL)
       VITE_MSAL_CLIENT_ID: $(VITE_MSAL_CLIENT_ID)
-      VITE_MSAL_AUTHORITY: $(VITE_MSAL_AUTHORITY)
-      VITE_MSAL_REDIRECT_URI: $(VITE_MSAL_REDIRECT_URI)
+      VITE_MSAL_TENANT_ID: $(VITE_MSAL_TENANT_ID)
       VITE_MSAL_API_SCOPE: $(VITE_MSAL_API_SCOPE)
 
   - task: AzureStaticWebApp@0

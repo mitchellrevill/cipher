@@ -98,7 +98,7 @@ module swa 'modules/staticweb.bicep' = {
   params: {
     name: swaName
     location: staticWebLocation
-    sku: environment == 'prod' ? 'Standard' : 'Free'
+    sku: 'Standard'
   }
 }
 
@@ -128,6 +128,16 @@ module appservice 'modules/appservice.bicep' = {
   }
 }
 
+module swaBackendLink 'modules/staticweb-linked-backend.bicep' = {
+  scope: rg
+  name: 'swa-backend-link'
+  params: {
+    staticSiteName: swa.outputs.name
+    backendResourceId: appservice.outputs.resourceId
+    backendRegion: location
+  }
+}
+
 module roles 'modules/roles.bicep' = {
   scope: rg
   name: 'roles'
@@ -141,8 +151,11 @@ module roles 'modules/roles.bicep' = {
 }
 
 output resourceGroupName string = rg.name
+output appServiceName string = appservice.outputs.name
 output appServiceUrl string = 'https://${appservice.outputs.defaultHostname}'
+output swaName string = swa.outputs.name
 output swaUrl string = 'https://${swa.outputs.defaultHostname}'
+output swaLinkedBackendName string = swaBackendLink.outputs.name
 // ACR removed from infra
 output cosmosEndpoint string = cosmos.outputs.endpoint
 output foundryEndpoint string = foundry.outputs.endpoint

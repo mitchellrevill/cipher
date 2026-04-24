@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.40.2.10011",
-      "templateHash": "12479063110359730326"
+      "templateHash": "9115044833284018293"
     }
   },
   "parameters": {
@@ -645,7 +645,9 @@
           "location": {
             "value": "[parameters('staticWebLocation')]"
           },
-          "sku": "[if(equals(parameters('environment'), 'prod'), createObject('value', 'Standard'), createObject('value', 'Free'))]"
+          "sku": {
+            "value": "Standard"
+          }
         },
         "template": {
           "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
@@ -958,6 +960,77 @@
         "swa"
       ]
     },
+    "swaBackendLink": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "swa-backend-link",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "staticSiteName": {
+            "value": "[reference('swa').outputs.name.value]"
+          },
+          "backendResourceId": {
+            "value": "[reference('appservice').outputs.resourceId.value]"
+          },
+          "backendRegion": {
+            "value": "[parameters('location')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.40.2.10011",
+              "templateHash": "6168139878764833608"
+            }
+          },
+          "parameters": {
+            "staticSiteName": {
+              "type": "string"
+            },
+            "backendResourceId": {
+              "type": "string"
+            },
+            "backendRegion": {
+              "type": "string"
+            },
+            "linkedBackendName": {
+              "type": "string",
+              "defaultValue": "appservice"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/staticSites/linkedBackends",
+              "apiVersion": "2025-03-01",
+              "name": "[format('{0}/{1}', parameters('staticSiteName'), parameters('linkedBackendName'))]",
+              "properties": {
+                "backendResourceId": "[parameters('backendResourceId')]",
+                "region": "[parameters('backendRegion')]"
+              }
+            }
+          ],
+          "outputs": {
+            "name": {
+              "type": "string",
+              "value": "[parameters('linkedBackendName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "appservice",
+        "rg",
+        "swa"
+      ]
+    },
     "roles": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
@@ -1080,13 +1153,25 @@
       "type": "string",
       "value": "[variables('rgName')]"
     },
+    "appServiceName": {
+      "type": "string",
+      "value": "[reference('appservice').outputs.name.value]"
+    },
     "appServiceUrl": {
       "type": "string",
       "value": "[format('https://{0}', reference('appservice').outputs.defaultHostname.value)]"
     },
+    "swaName": {
+      "type": "string",
+      "value": "[reference('swa').outputs.name.value]"
+    },
     "swaUrl": {
       "type": "string",
       "value": "[format('https://{0}', reference('swa').outputs.defaultHostname.value)]"
+    },
+    "swaLinkedBackendName": {
+      "type": "string",
+      "value": "[reference('swaBackendLink').outputs.name.value]"
     },
     "cosmosEndpoint": {
       "type": "string",

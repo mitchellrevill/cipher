@@ -67,12 +67,14 @@ export function redirectToLogin(
 
 export async function startLoginRedirect(redirectTarget: string): Promise<void> {
   if (!isMsalConfigured) {
-    throw new Error("MSAL is not configured. Set VITE_MSAL_CLIENT_ID and VITE_MSAL_AUTHORITY.");
+    throw new Error("MSAL is not configured. Set VITE_MSAL_CLIENT_ID and VITE_MSAL_TENANT_ID.");
   }
+
+  const redirectStartPage = new URL(redirectTarget || "/", window.location.origin).toString();
 
   await msalInstance.loginRedirect({
     ...loginRequest,
-    redirectStartPage: redirectTarget,
+    redirectStartPage,
     prompt: "select_account",
   });
 }
@@ -109,7 +111,7 @@ export async function initializeMsalSession(currentPathname = window.location.pa
 
 export async function getAccessToken(): Promise<string | null> {
   if (!isMsalConfigured) {
-    useAuthStore.getState().setError("MSAL is not configured. Set VITE_MSAL_CLIENT_ID and VITE_MSAL_AUTHORITY.");
+    useAuthStore.getState().setError("MSAL is not configured. Set VITE_MSAL_CLIENT_ID and VITE_MSAL_TENANT_ID.");
     return null;
   }
 
